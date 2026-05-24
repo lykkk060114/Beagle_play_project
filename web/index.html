@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agri Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1118;
+      --panel: #111a24;
+      --panel-2: #172131;
+      --line: #233142;
+      --text: #e6eef8;
+      --muted: #8c9db3;
+      --ok: #39d98a;
+      --warn: #f5c451;
+      --bad: #ff6b6b;
+      --accent: #5da9ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #091017 0%, #0b1118 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--warn);
+      box-shadow: 0 0 0 4px rgba(245, 196, 81, 0.12);
+    }
+
+    .dot.ok { background: var(--ok); box-shadow: 0 0 0 4px rgba(57, 217, 138, 0.12); }
+    .dot.bad { background: var(--bad); box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.12); }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .section {
+      background: rgba(17, 26, 36, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+
+    .metric {
+      padding: 14px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-height: 92px;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    .metric .value {
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .metric .hint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 12px;
+    }
+
+    .node-card {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .node-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .node-id {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      border: 1px solid transparent;
+    }
+
+    .badge.ok { color: var(--ok); background: rgba(57, 217, 138, 0.12); border-color: rgba(57, 217, 138, 0.35); }
+    .badge.warn { color: var(--warn); background: rgba(245, 196, 81, 0.12); border-color: rgba(245, 196, 81, 0.35); }
+    .badge.bad { color: var(--bad); background: rgba(255, 107, 107, 0.12); border-color: rgba(255, 107, 107, 0.35); }
+
+    .node-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .kv .k { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .kv .v { font-size: 16px; font-weight: 600; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #0d1620;
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(93, 169, 255, 0.12);
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: #13202d;
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font: inherit;
+      transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+    }
+
+    button:hover { transform: translateY(-1px); border-color: #39516b; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    button.primary { background: rgba(93, 169, 255, 0.12); border-color: rgba(93, 169, 255, 0.4); }
+    button.ok { background: rgba(57, 217, 138, 0.12); border-color: rgba(57, 217, 138, 0.35); }
+    button.warn { background: rgba(245, 196, 81, 0.12); border-color: rgba(245, 196, 81, 0.35); }
+    button.bad { background: rgba(255, 107, 107, 0.12); border-color: rgba(255, 107, 107, 0.35); }
+    button.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px rgba(93, 169, 255, 0.35); }
+
+    .events {
+      max-height: 360px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .event {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #0d1620;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .event.ok { border-color: rgba(57, 217, 138, 0.35); }
+    .event.warn { border-color: rgba(245, 196, 81, 0.35); }
+    .event.bad { border-color: rgba(255, 107, 107, 0.35); }
+    .event small { display: block; color: var(--muted); margin-bottom: 4px; }
+
+    .foot {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 1100px) {
+      .grid-4, .grid-3, .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      header { flex-direction: column; align-items: flex-start; }
+      .grid-4, .grid-3, .form-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>智能农业网页控制台</h1>
+        <div class="subtitle">BeaglePlay UDP 网关 + 主机端后端 + 浏览器监控面板</div>
+      </div>
+      <div class="status-pill"><span id="connDot" class="dot"></span><span id="connText">等待状态</span></div>
+    </header>
+
+    <section class="section">
+      <h2>系统总览</h2>
+      <div class="grid-4">
+        <div class="metric">
+          <div class="label">系统运行</div>
+          <div id="runningValue" class="value">-</div>
+          <div class="hint">running</div>
+        </div>
+        <div class="metric">
+          <div class="label">当前模式</div>
+          <div id="modeValue" class="value">-</div>
+          <div class="hint">auto / manual / safe</div>
+        </div>
+        <div class="metric">
+          <div class="label">在线节点</div>
+          <div id="onlineValue" class="value">-</div>
+          <div class="hint">nodes online</div>
+        </div>
+        <div class="metric">
+          <div class="label">网关状态</div>
+          <div id="gatewayValue" class="value">-</div>
+          <div class="hint">gateway</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="ok" onclick="postNoBody('/api/system/start')">启动系统</button>
+        <button class="bad" onclick="postNoBody('/api/system/stop')">停止系统</button>
+        <button class="primary" onclick="postNoBody('/api/system/restart_gateway')">请求重启网关</button>
+      </div>
+      <div class="foot">最后更新时间：<span id="updatedAt">-</span></div>
+    </section>
+
+    <section class="section" style="margin-top:14px;">
+      <h2>Freedom 节点实时数据</h2>
+      <div id="nodeCards" class="cards"></div>
+    </section>
+
+    <section class="grid-3" style="margin-top:14px;">
+      <div class="section">
+        <h2>阈值设置</h2>
+        <div class="form-grid">
+          <div class="field"><label>光照下限</label><input id="light_low" type="number" step="0.1"></div>
+          <div class="field"><label>光照恢复值</label><input id="light_high" type="number" step="0.1"></div>
+          <div class="field"><label>湿度下限</label><input id="humidity_low" type="number" step="0.1"></div>
+          <div class="field"><label>温度上限</label><input id="temperature_high" type="number" step="0.1"></div>
+          <div class="field"><label>喷水时长(秒)</label><input id="pump_duration_sec" type="number" step="1" min="0"></div>
+          <div class="field"><label>喷水冷却(秒)</label><input id="pump_cooldown_sec" type="number" step="1" min="0"></div>
+        </div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="primary" onclick="saveConfig()">保存阈值</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>模式切换</h2>
+        <div class="btn-row">
+          <button id="mode_auto" class="primary" onclick="setMode('auto')">自动模式</button>
+          <button id="mode_manual" class="primary" onclick="setMode('manual')">手动模式</button>
+          <button id="mode_safe" class="warn" onclick="setMode('safe')">安全模式</button>
+        </div>
+        <div class="foot">safe 模式下后端会关闭全部执行器并拒绝控制请求。</div>
+      </div>
+
+      <div class="section">
+        <h2>手动控制</h2>
+        <div class="btn-row">
+          <button onclick="controlDevice('light','on')">开灯</button>
+          <button onclick="controlDevice('light','off')">关灯</button>
+          <button class="ok" onclick="controlDevice('pump','once')">喷水一次</button>
+          <button class="bad" onclick="controlDevice('pump','off')">水泵急停</button>
+          <button onclick="controlDevice('fan','on')">开风扇</button>
+          <button onclick="controlDevice('fan','off')">关风扇</button>
+        </div>
+        <div class="foot">当前仅修改后端状态变量，不直接控制真实 GPIO。</div>
+      </div>
+    </section>
+
+    <section class="section" style="margin-top:14px;">
+      <h2>事件日志</h2>
+      <div id="events" class="events"></div>
+    </section>
+  </div>
+
+  <script>
+    let latestStatus = null;
+
+    function byId(id) {
+      return document.getElementById(id);
+    }
+
+    function fmtBool(value) {
+      return value ? 'ON' : 'OFF';
+    }
+
+    function fmtTime(ms) {
+      if (!ms) return '-';
+      return new Date(ms).toLocaleString();
+    }
+
+    function setConnection(ok, text) {
+      byId('connText').textContent = text;
+      const dot = byId('connDot');
+      dot.className = 'dot' + (ok === true ? ' ok' : ok === false ? ' bad' : '');
+    }
+
+    function setInputIfIdle(id, value) {
+      const el = byId(id);
+      if (document.activeElement !== el) {
+        el.value = value;
+      }
+    }
+
+    function updateModeButtons(mode) {
+      for (const id of ['mode_auto', 'mode_manual', 'mode_safe']) {
+        byId(id).classList.remove('active');
+      }
+      const activeId = mode === 'auto' ? 'mode_auto' : mode === 'manual' ? 'mode_manual' : 'mode_safe';
+      byId(activeId).classList.add('active');
+      const disableManual = mode === 'safe';
+      for (const btn of document.querySelectorAll('.section:nth-of-type(4) button')) {
+        btn.disabled = disableManual && btn.innerText !== '保存阈值';
+      }
+    }
+
+    function renderNodes(nodes) {
+      const host = byId('nodeCards');
+      const keys = Object.keys(nodes || {});
+      if (!keys.length) {
+        host.innerHTML = '<div class="node-card"><div class="node-id">暂无节点数据</div><div class="foot">等待 BeaglePlay 发送 UDP JSON。</div></div>';
+        return;
+      }
+
+      host.innerHTML = keys.map((key) => {
+        const n = nodes[key];
+        const online = !!n.online;
+        const badgeClass = online ? 'ok' : 'bad';
+        const stateText = online ? 'ONLINE' : 'OFFLINE';
+        return `
+          <div class="node-card">
+            <div class="node-head">
+              <div class="node-id">${key}</div>
+              <span class="badge ${badgeClass}">${stateText}</span>
+            </div>
+            <div class="node-grid">
+              <div class="kv"><div class="k">温度</div><div class="v">${Number(n.temperature).toFixed(1)} ℃</div></div>
+              <div class="kv"><div class="k">湿度</div><div class="v">${Number(n.humidity).toFixed(1)} %</div></div>
+              <div class="kv"><div class="k">光照</div><div class="v">${Number(n.light).toFixed(1)}</div></div>
+              <div class="kv"><div class="k">RSSI</div><div class="v">${Number(n.rssi).toFixed(0)} dBm</div></div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function renderEvents(events) {
+      const host = byId('events');
+      if (!events || !events.length) {
+        host.innerHTML = '<div class="event">暂无事件</div>';
+        return;
+      }
+      host.innerHTML = events.slice().reverse().map((e) => {
+        const cls = e.level === 'warn' ? 'warn' : e.level === 'bad' || e.level === 'error' ? 'bad' : 'ok';
+        return `<div class="event ${cls}"><small>${e.level}</small>${e.text}</div>`;
+      }).join('');
+    }
+
+    function renderStatus(data) {
+      latestStatus = data;
+      setConnection(true, '在线');
+      byId('runningValue').textContent = fmtBool(data.running);
+      byId('modeValue').textContent = data.mode || '-';
+      byId('gatewayValue').textContent = data.gateway || '-';
+      byId('onlineValue').textContent = String(Object.values(data.nodes || {}).filter((n) => n.online).length);
+      byId('updatedAt').textContent = fmtTime(data.last_update_ms);
+
+      const config = data.config || {};
+      setInputIfIdle('light_low', config.light_low ?? '');
+      setInputIfIdle('light_high', config.light_high ?? '');
+      setInputIfIdle('humidity_low', config.humidity_low ?? '');
+      setInputIfIdle('temperature_high', config.temperature_high ?? '');
+      setInputIfIdle('pump_duration_sec', config.pump_duration_sec ?? '');
+      setInputIfIdle('pump_cooldown_sec', config.pump_cooldown_sec ?? '');
+
+      updateModeButtons(data.mode || 'manual');
+      renderNodes(data.nodes || {});
+      renderEvents(data.events || []);
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+      });
+      const text = await res.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch (_) {}
+      if (!res.ok) {
+        const msg = json && json.error ? json.error : text || res.statusText;
+        throw new Error(msg);
+      }
+      return json || {};
+    }
+
+    async function postNoBody(path) {
+      try {
+        await api(path, { method: 'POST', body: '{}' });
+        await loadStatus();
+      } catch (err) {
+        setConnection(false, err.message);
+      }
+    }
+
+    async function setMode(mode) {
+      try {
+        await api('/api/mode', { method: 'POST', body: JSON.stringify({ mode }) });
+        await loadStatus();
+      } catch (err) {
+        setConnection(false, err.message);
+      }
+    }
+
+    async function saveConfig() {
+      try {
+        const payload = {
+          light_low: Number(byId('light_low').value),
+          light_high: Number(byId('light_high').value),
+          humidity_low: Number(byId('humidity_low').value),
+          temperature_high: Number(byId('temperature_high').value),
+          pump_duration_sec: Number(byId('pump_duration_sec').value),
+          pump_cooldown_sec: Number(byId('pump_cooldown_sec').value),
+        };
+        await api('/api/config', { method: 'POST', body: JSON.stringify(payload) });
+        await loadStatus();
+      } catch (err) {
+        setConnection(false, err.message);
+      }
+    }
+
+    async function controlDevice(device, action) {
+      try {
+        await api('/api/control', {
+          method: 'POST',
+          body: JSON.stringify({ device, action }),
+        });
+        await loadStatus();
+      } catch (err) {
+        setConnection(false, err.message);
+      }
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        renderStatus(data);
+      } catch (err) {
+        setConnection(false, '离线');
+      }
+    }
+
+    loadStatus();
+    setInterval(loadStatus, 1000);
+  </script>
+</body>
+</html>

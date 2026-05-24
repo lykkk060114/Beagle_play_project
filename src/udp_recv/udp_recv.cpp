@@ -2,23 +2,14 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-24 10:09:08
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-24 19:23:54
+ * @LastEditTime: 2026-05-24 21:02:55
  * @FilePath: /beagle_play/src/udp_recv/udp_recv.cpp
  * @Description: 主机端的udp接收程序, 开放9000端口，等别人的数据传输过来
  * @
  * @Copyright (c) 2026  All Rights Reserved. 
  */
 
-// Socket
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-// IO
-#include <iostream>
-#include <cstring>
-
+#include "udp_recv.hpp"
 int main() {
     constexpr int PORT = 9000;
 

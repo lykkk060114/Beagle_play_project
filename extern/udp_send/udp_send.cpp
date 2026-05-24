@@ -2,29 +2,14 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-24 10:31:13
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-24 19:55:10
- * @FilePath: /beagle_play/src/udp_send/udp_send.cpp
+ * @LastEditTime: 2026-05-24 22:14:53
+ * @FilePath: /beagle_play/extern/udp_send/udp_send.cpp
  * @Description: udp的发送程序， 在beagle_play板子上
  * @
  * @Copyright (c) 2026  All Rights Reserved. 
  */
 
-// SOCKET
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-// 时间
-#include <chrono>
-
-// IO
-#include <iostream>
-#include <cstring>
-#include <string>
-
-// 线程
-#include <thread>
+#include "udp_send.hpp"
 
 int main() {
     const std::string ip = "192.168.7.1";
