@@ -2,7 +2,7 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-24 10:31:13
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-24 10:42:57
+ * @LastEditTime: 2026-05-24 19:55:10
  * @FilePath: /beagle_play/src/udp_send/udp_send.cpp
  * @Description: udp的发送程序， 在beagle_play板子上
  * @
@@ -27,7 +27,7 @@
 #include <thread>
 
 int main() {
-    const std::string ip = "127.0.0.1";
+    const std::string ip = "192.168.7.1";
     constexpr int HOST_PORT = 9000;
 
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);

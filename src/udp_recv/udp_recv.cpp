@@ -2,9 +2,9 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-24 10:09:08
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-24 10:22:05
- * @FilePath: /src/udp_recv/udp_recv.cpp
- * @Description: 主机端的udp接收程序
+ * @LastEditTime: 2026-05-24 19:23:54
+ * @FilePath: /beagle_play/src/udp_recv/udp_recv.cpp
+ * @Description: 主机端的udp接收程序, 开放9000端口，等别人的数据传输过来
  * @
  * @Copyright (c) 2026  All Rights Reserved. 
  */
@@ -22,6 +22,12 @@
 int main() {
     constexpr int PORT = 9000;
 
+    /*** 
+     * @description: 创建UDP套接字
+     * @return {*}
+     * @param AF_INET 表示 IPV4 协议, 
+     * SOCK_DGRAM 表示使用UDP协议, SOCK_STREAM 则表示使用TCP协议
+     */    
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     // 创建UDP套接字
     if (sockfd < 0) {
@@ -29,6 +35,7 @@ int main() {
         perror("socket");
         return 1;
     }
+    // socket internet
 
     sockaddr_in server_addr{};  
     server_addr.sin_family = AF_INET;
