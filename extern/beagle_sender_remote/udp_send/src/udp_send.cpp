@@ -2,8 +2,8 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-24 10:31:13
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-24 23:34:45
- * @FilePath: /beagle_play/extern/beagle_sender/src/udp_send.cpp
+ * @LastEditTime: 2026-05-25 19:14:33
+ * @FilePath: /beagle_sender_remote/udp_send/src/udp_send.cpp
  * @Description: udp的发送程序， 在beagle_play板子上
  * @
  * @Copyright (c) 2026  All Rights Reserved. 
@@ -13,14 +13,22 @@
 
 namespace BeagleSender {
 
-    SensorData make_fake_data(const std::string& node, int seq) {
+    // 制造假数据的函数， 用来测试用
+    // SensorData make_fake_data(const std::string& node, int seq) {
+    //     SensorData data;
+    //     data.node = node;
+    //     // 数据段生成
+    //     data.temperature = 28.0 + std::sin(seq * 0.1) * 1.5;
+    //     data.humidity = 60.0 + std::cos(seq * 0.07) * 5.0;
+    //     data.light = 20.0 + std::sin(seq * 0.2) * 10.0;
+    //     data.rssi = -55 + static_cast<int>(std::sin(seq * 0.15) * 8);
+
+    //     return data;
+    // }
+    SensorData make_real_data(const std::string &node, int seq) {
         SensorData data;
         data.node = node;
-        // 数据段生成
-        data.temperature = 28.0 + std::sin(seq * 0.1) * 1.5;
-        data.humidity = 60.0 + std::cos(seq * 0.07) * 5.0;
-        data.light = 20.0 + std::sin(seq * 0.2) * 10.0;
-        data.rssi = -55 + static_cast<int>(std::sin(seq * 0.15) * 8);
+        // 读取传感器数据
 
         return data;
     }
@@ -58,7 +66,7 @@ int main() {
 
     while (true) {
         // 创建数据段
-        SensorData data = BeagleSender::make_fake_data(node_id, seq); // 
+        SensorData data = BeagleSender::make_real_data(node_id, seq); // 
 
         // 创建JSON字符串
         std::string send_msg = BeagleSender::build_json(data, seq);
