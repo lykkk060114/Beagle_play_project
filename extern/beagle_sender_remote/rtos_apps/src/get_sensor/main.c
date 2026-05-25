@@ -2,7 +2,7 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-25 17:10:35
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-25 22:43:09
+ * @LastEditTime: 2026-05-25 22:58:16
  * @FilePath: /beagle_sender_remote/rtos_apps/src/get_sensor/main.c
  * @Description: 正式开始rtos例程的书写
  * 
@@ -16,7 +16,7 @@
 #include <zephyr/drivers/sensor.h>
 
 #define HDC2010_DEV_NAME "HDC2010-HUMIDITY"
-
+#define LIGHT_DEV_NAME "OPT3001-LIGHT"
 static int abs_val2(int val2)
 {
     if (val2 < 0) {
@@ -24,6 +24,13 @@ static int abs_val2(int val2)
     }
 
     return val2;
+}
+
+static void print_light(const struct sensor_value *light)
+{
+	printk("light       = %d.%06d lux\n",
+		   light->val1,
+		   abs_val2(light->val2));
 }
 
 static void print_temperature(const struct sensor_value *temperature)
@@ -45,24 +52,30 @@ int main(void)
 {
     const struct device *hdc2010_dev;
 
-    printk("Freedom HDC2010 sensor example start\n");
+	const struct device *light_dev;
+    printk("Freedom sensor example start\n");
 
     hdc2010_dev = device_get_binding(HDC2010_DEV_NAME);
-    if (hdc2010_dev == NULL) {
+	light_dev = device_get_binding(LIGHT_DEV_NAME);
+    if (hdc2010_dev == NULL || light_dev == NULL) {
         printk("Could not find device: %s\n", HDC2010_DEV_NAME);
         return 0;
     }
 
     printk("Device found: %s\n", HDC2010_DEV_NAME);
+    printk("Device found: %s\n", LIGHT_DEV_NAME);
 
     while (1) {
         struct sensor_value temperature;
         struct sensor_value humidity;
+		struct sensor_value light;
         int ret;
 
+		// 从传感器中拿数据
         ret = sensor_sample_fetch(hdc2010_dev);
+		ret *= sensor_sample_fetch(light_dev);
         if (ret < 0) {
-            printk("sensor_sample_fetch failed: %d\n", ret);
+			printk("sensor_sample_fetch failed: %d\n", ret);
             k_sleep(K_SECONDS(1));
             continue;
         }
@@ -87,8 +100,19 @@ int main(void)
             continue;
         }
 
+		ret = sensor_channel_get(light_dev,
+								 SENSOR_CHAN_LIGHT,
+								 &light);
+
+		if (ret < 0) {
+			printk("sensor_channel_get light failed: %d\n", ret);
+			k_sleep(K_SECONDS(1));
+			continue;
+		}
+
         print_temperature(&temperature);
         print_humidity(&humidity);
+        print_light(&light);
         printk("--------------------\n");
 
         k_sleep(K_SECONDS(1));

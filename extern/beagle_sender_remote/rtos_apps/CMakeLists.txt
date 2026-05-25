@@ -8,10 +8,14 @@ target_include_directories(app
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 # file(GLOB_RECURSE app_sources ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c)
-
+file (GLOB_RECURSE 
+    app_sources 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sensor_node/*.c)
 target_sources(app 
     PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/get_sensor/main.c)
+    # ${CMAKE_CURRENT_SOURCE_DIR}/src/get_sensor/main.c
+    ${app_sources}
+    )
 
 
 
