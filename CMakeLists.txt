@@ -14,12 +14,10 @@ set(RECV_SRC_FILES
 #     ${CMAKE_CURRENT_SOURCE_DIR}/src/udp_send/udp_send.cpp
 # )
 
-set(DASHBOARD_SRC_FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/dashboard_server/main.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/dashboard_server/dashboard_server.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/dashboard_server/http_utils.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/dashboard_server/json_utils.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/dashboard_server/state.cpp
+# === 收集dashboard_server的源文件 ===， configure_depends 选项会让CMake在每次构建时重新评估这个glob，这样就能自动捕捉到新增的源文件了
+file(GLOB DASHBOARD_SRC_FILES
+    CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dashboard_server/*.cpp
 )
 # === 生成可执行文件 ===
 add_executable(udp_recv ${RECV_SRC_FILES})
