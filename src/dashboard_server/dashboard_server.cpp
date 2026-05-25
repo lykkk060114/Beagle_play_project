@@ -2,7 +2,7 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-24 20:48:05
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-24 22:07:50
+ * @LastEditTime: 2026-05-25 11:20:03
  * @FilePath: /beagle_play/src/dashboard_server/dashboard_server.cpp
  * @Description: 
  * @
@@ -38,6 +38,7 @@ bool DashboardServer::start() {
     }
 
 void DashboardServer::run() {
+    // 开两个循环线程
         std::thread udp_thread(&DashboardServer::udpLoop, this);
         std::thread http_thread(&DashboardServer::httpLoop, this);
 
@@ -54,6 +55,7 @@ void DashboardServer::run() {
         }
     }
 
+// 打开端口并监听UDP数据包
 bool DashboardServer::openUdpSocket() {
         udp_sock_ = socket(AF_INET, SOCK_DGRAM, 0);
         if (udp_sock_ < 0) {
@@ -265,6 +267,7 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
         }
 
+        // 当前端执行 开启 关闭 后端对应的系统状态就会改变
         if (request.method == "POST" && request.path == "/api/system/start") {
             std::lock_guard<std::mutex> lock(state_mutex_);
             state_.running = true;
@@ -282,12 +285,14 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
         }
 
+        // 当前端重启网关。 后端只是记录
         if (request.method == "POST" && request.path == "/api/system/restart_gateway") {
             std::lock_guard<std::mutex> lock(state_mutex_);
             appendEventLocked("ok", "Gateway restart requested");
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
         }
 
+        // 当前端切换模式时走这个窗口
         if (request.method == "POST" && request.path == "/api/mode") {
             std::map<std::string, std::string> body;
             std::string error;
@@ -314,6 +319,8 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
         }
 
+
+        // 当前端修改config的 阈值 时， 也会走这个接口， 这里会根据前端传来的JSON来更新config的值
         if (request.method == "POST" && request.path == "/api/config") {
             std::map<std::string, std::string> body;
             std::string error;
@@ -337,6 +344,8 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
         }
 
+
+        // 当前端发送控制指令， 对应的设备和动作就会执行
         if (request.method == "POST" && request.path == "/api/control") {
             std::map<std::string, std::string> body;
             std::string error;

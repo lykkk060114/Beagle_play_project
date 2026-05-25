@@ -2,7 +2,7 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-24 21:06:42
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-24 22:04:30
+ * @LastEditTime: 2026-05-25 09:46:50
  * @FilePath: /beagle_play/include/dashboard_server/state.hpp
  * @Description: 这个文件是状态相关的结构体定义
  * @
@@ -26,7 +26,7 @@ constexpr std::size_t kMaxEvents = 50;
 long long nowMs();
 
 /*** 
- * @description: 事件启动
+ * @description: 事件日志结构体
  * @return {*}
  */
 struct EventEntry {
