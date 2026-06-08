@@ -2,45 +2,21 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-25 17:10:35
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-06-08 16:45:11
- * @FilePath: /beagle_play/extern/beagle_sender_remote/rtos_apps/src/get_sensor/main.c
+ * @LastEditTime: 2026-06-08 21:24:29
+ * @FilePath: /beagle_play/extern/rtos_apps/src/get_sensor/main.c
  * @Description: 读取传感器的值并且通过udp发送出来
  * 
  * Copyright (c) 2026  All Rights Reserved. 
  */
-
-// system
-#include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
-#include <zephyr/device.h>
-#include <zephyr/drivers/sensor.h>
-
-// network
-#include <zephyr/net/socket.h>
-#include <zephyr/net/net_if.h>
-#include <zephyr/net/net_ip.h>
-
 
 // C standard library
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
 
-// 节点定义
-#define NODE_ID "F1"
-#define HDC2010_DEV_NAME "HDC2010-HUMIDITY"
-#define LIGHT_DEV_NAME "OPT3001-LIGHT"
+// 头文件
+#include <sensor_node/utils.h>
 
-#define FREEDOM_IPV6_ADDR "2001:db8::1"
-#define BEAGLE_IPV6_ADDR "2001:db8::2"
-#define BEAGLE_PORT 9999
-
-// 结构体定义
-struct sensor_data {
-	struct sensor_value temperature;
-	struct sensor_value humidity;
-	struct sensor_value light;
-};
 
 static int abs_val2(int val2) {
     if (val2 < 0) {
@@ -72,13 +48,13 @@ static int setup_ipv6_addr(void) {
 }
 
 static int create_udp_socket(struct sockaddr_in6 *dest_addr) {
-	int sock = socket(AF_INT6, SOCK_DGRAM, IPPOTO_UDP);
+	int sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock < 0) {
 		printk("socket creation failed: %d\n", errno);
 		return -errno;
 	}
 
-	memeset(dest_addr, 0, sizeof(*dest_addr));
+	memset(dest_addr, 0, sizeof(*dest_addr));
 	dest_addr->sin6_family = AF_INET6;
 	dest_addr->sin6_port = htons(BEAGLE_PORT);
 
@@ -88,7 +64,7 @@ static int create_udp_socket(struct sockaddr_in6 *dest_addr) {
 		return -EINVAL;
 	}
 
-	printk("UDP target: [%s]:%d\n", BEAGLE_IPV6_ADDR, BEAGLE_UDP_PORT);
+	printk("UDP target: [%s]:%d\n", BEAGLE_IPV6_ADDR, BEAGLE_PORT);
 	return sock;
 }
 /**
@@ -122,18 +98,18 @@ static int read_hdc2010(const struct device *dev, struct sensor_data *data)
 /**
  * @description: get light_data 
  * @param {device} *dev
- * @param {sensor_value} *light
+ * @param {sensor_data} *data
  * @return {*}
  */
-static int read_opt3001(const struct device *dev, struct sensor_value *light) {
+static int read_opt3001(const struct device *dev, struct sensor_data *data) {
 	int ret;
 
-	ret = snesor_sample_fetch(dev);
+	ret = sensor_sample_fetch(dev);
 	if (ret < 0) {
 		return ret;
 	}
 
-	ret = sensor_channel_get(dev, SENSOR_CHAN_LIGHT, &light->light);
+	ret = sensor_channel_get(dev, SENSOR_CHAN_LIGHT, &data->light);
     if (ret < 0) {
         return ret;
     }
@@ -188,7 +164,7 @@ static int build_payload(char *buf,
 int main(void)
 {
     const struct device *hdc2010_dev;
-	const struct device *pot3001_dev;
+	const struct device *opt3001_dev;
     printk("Freedom sensor example start\n");
 
 	struct sockaddr_in6 dest_addr;
@@ -197,11 +173,16 @@ int main(void)
 
 
     hdc2010_dev = device_get_binding(HDC2010_DEV_NAME);
-	pot3001_dev = device_get_binding(POT3001_DEV_NAME);
-    if (hdc2010_dev == NULL || pot3001_dev == NULL) {
-        printk("Could not find device: %s\n", HDC2010_DEV_NAME);
+	opt3001_dev = device_get_binding(LIGHT_DEV_NAME);
+    if (hdc2010_dev == NULL || opt3001_dev == NULL) {
+        printk("Could not find device: %s or %s\n", HDC2010_DEV_NAME, LIGHT_DEV_NAME);
         return 0;
     }
+
+	if (setup_ipv6_addr() < 0) {
+		printk("Failed to setup IPv6 address\n");
+		return 0;
+	}
 
 	sock = create_udp_socket(&dest_addr);
 	if (sock < 0) {
@@ -212,7 +193,6 @@ int main(void)
     while (1) {
 		struct sensor_data data;
 		char payload[192];
-		int payload_len;
         int ret;
 
         ret = read_hdc2010(hdc2010_dev, &data);

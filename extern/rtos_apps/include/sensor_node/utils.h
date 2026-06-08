@@ -1,35 +1,58 @@
 /*** 
  * @Author: LYK && 2586356361@qq.com
- * @Date: 2026-05-25 23:00:58
+ * @Date: 2026-06-08 21:16:29
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-25 23:07:35
- * @FilePath: /beagle_sender_remote/rtos_apps/include/sensor_node/utils.h
+ * @LastEditTime: 2026-06-08 21:16:47
+ * @FilePath: /beagle_play/extern/rtos_apps/include/sensor_node/utils.h
  * @Description: 
  * @
  * @Copyright (c) 2026  All Rights Reserved. 
  */
-
 #ifndef SENSOR_NODE_UTILS_H
 #define SENSOR_NODE_UTILS_H
-// 个人的结构体定义
-#include "types.h"
 
-// 常用的rtos头文件
+#include <stddef.h>
+
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/net/socket.h>
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_ip.h>
 
-// 入口函数
-extern bool fetch_sensor_data(const struct device *hdc2010_dev, const struct device *light_dev, my_SensorData *data);
+#include "types.h"
 
-// 核心获取函数
-void fetch_mudi_data(const struct device *mudi_dev, float *temperature, float *humidity);
-void fetch_light_data(const struct device *light_dev, float *light);
+#ifndef NODE_ID
+#define NODE_ID "F1"
+#endif
 
+#ifndef HDC2010_DEV_NAME
+#define HDC2010_DEV_NAME "HDC2010-HUMIDITY"
+#endif
 
-void print_temperature(const struct sensor_value *temperature);
-void print_humidity(const struct sensor_value *humidity);
-void print_light(const struct sensor_value *light);
+#ifndef LIGHT_DEV_NAME
+#define LIGHT_DEV_NAME "OPT3001-LIGHT"
+#endif
 
-int abs_val2(int val2);
+#ifndef FREEDOM_IPV6_ADDR
+#define FREEDOM_IPV6_ADDR "2001:db8::1"
+#endif
+
+#ifndef BEAGLE_IPV6_ADDR
+#define BEAGLE_IPV6_ADDR "2001:db8::2"
+#endif
+
+#ifndef BEAGLE_PORT
+#define BEAGLE_PORT 9999
+#endif
+
+static int setup_ipv6_addr(void);
+static int create_udp_socket(struct sockaddr_in6 *dest_addr);
+static int read_hdc2010(const struct device *dev, struct sensor_data *data);
+static int read_opt3001(const struct device *dev, struct sensor_data *data);
+static int build_payload(char *buf, size_t buf_size, const struct sensor_data *data, int seq);
+static int abs_val2(int val2);
+static void print_light(const struct sensor_value *light);
+
+#endif // SENSOR_NODE_UTILS_H
