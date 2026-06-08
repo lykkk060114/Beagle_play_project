@@ -1,122 +1,111 @@
-/*
- * @Author: LYK && 2586356361@qq.com
- * @Date: 2026-05-25 17:10:35
- * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-25 22:58:16
- * @FilePath: /beagle_sender_remote/rtos_apps/src/get_sensor/main.c
- * @Description: 正式开始rtos例程的书写
- * 
- * Copyright (c) 2026  All Rights Reserved. 
- */
-
-
-#include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/printk.h>
 
 #define HDC2010_DEV_NAME "HDC2010-HUMIDITY"
-#define LIGHT_DEV_NAME "OPT3001-LIGHT"
+#define OPT3001_DEV_NAME "OPT3001-LIGHT"
+#define NODE_ID "F1"
+
+struct agri_sensor_data {
+	struct sensor_value temperature;
+	struct sensor_value humidity;
+	struct sensor_value light;
+};
+
 static int abs_val2(int val2)
 {
-    if (val2 < 0) {
-        return -val2;
-    }
+	if (val2 < 0) {
+		return -val2;
+	}
 
-    return val2;
+	return val2;
 }
 
-static void print_light(const struct sensor_value *light)
+static int read_hdc2010(const struct device *dev, struct agri_sensor_data *data)
 {
-	printk("light       = %d.%06d lux\n",
-		   light->val1,
-		   abs_val2(light->val2));
+	int ret;
+
+	/* Fetch once, then read both cached HDC2010 sensor channels. */
+	ret = sensor_sample_fetch(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = sensor_channel_get(dev, SENSOR_CHAN_AMBIENT_TEMP,
+				 &data->temperature);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return sensor_channel_get(dev, SENSOR_CHAN_HUMIDITY, &data->humidity);
 }
 
-static void print_temperature(const struct sensor_value *temperature)
+static int read_opt3001(const struct device *dev, struct agri_sensor_data *data)
 {
-	// val1是整数部分，val2是小数部分，单位是百万分之一
-    printk("temperature = %d.%06d C\n",
-           temperature->val1,
-           abs_val2(temperature->val2));
+	int ret;
+
+	/* Fetch a fresh OPT3001 sample before reading the light channel. */
+	ret = sensor_sample_fetch(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return sensor_channel_get(dev, SENSOR_CHAN_LIGHT, &data->light);
 }
 
-static void print_humidity(const struct sensor_value *humidity)
+static void print_agri_data(const struct agri_sensor_data *data)
 {
-    printk("humidity    = %d.%06d %%\n",
-           humidity->val1,
-           abs_val2(humidity->val2));
+	printk("agri_data node=%s temperature=%d.%06d humidity=%d.%06d light=%d.%06d\n",
+	       NODE_ID,
+	       data->temperature.val1, abs_val2(data->temperature.val2),
+	       data->humidity.val1, abs_val2(data->humidity.val2),
+	       data->light.val1, abs_val2(data->light.val2));
 }
 
 int main(void)
 {
-    const struct device *hdc2010_dev;
+	const struct device *hdc2010_dev;
+	const struct device *opt3001_dev;
 
-	const struct device *light_dev;
-    printk("Freedom sensor example start\n");
+	printk("Freedom agri sensor app start\n");
 
-    hdc2010_dev = device_get_binding(HDC2010_DEV_NAME);
-	light_dev = device_get_binding(LIGHT_DEV_NAME);
-    if (hdc2010_dev == NULL || light_dev == NULL) {
-        printk("Could not find device: %s\n", HDC2010_DEV_NAME);
-        return 0;
-    }
+	hdc2010_dev = device_get_binding(HDC2010_DEV_NAME);
+	if (hdc2010_dev == NULL) {
+		printk("device_get_binding failed: %s\n", HDC2010_DEV_NAME);
+		return 0;
+	}
 
-    printk("Device found: %s\n", HDC2010_DEV_NAME);
-    printk("Device found: %s\n", LIGHT_DEV_NAME);
+	opt3001_dev = device_get_binding(OPT3001_DEV_NAME);
+	if (opt3001_dev == NULL) {
+		printk("device_get_binding failed: %s\n", OPT3001_DEV_NAME);
+		return 0;
+	}
 
-    while (1) {
-        struct sensor_value temperature;
-        struct sensor_value humidity;
-		struct sensor_value light;
-        int ret;
+	printk("Device found: %s\n", HDC2010_DEV_NAME);
+	printk("Device found: %s\n", OPT3001_DEV_NAME);
 
-		// 从传感器中拿数据
-        ret = sensor_sample_fetch(hdc2010_dev);
-		ret *= sensor_sample_fetch(light_dev);
-        if (ret < 0) {
-			printk("sensor_sample_fetch failed: %d\n", ret);
-            k_sleep(K_SECONDS(1));
-            continue;
-        }
+	while (1) {
+		struct agri_sensor_data data;
+		int ret;
 
-		// 温度传感器通道
-        ret = sensor_channel_get(hdc2010_dev,
-                                 SENSOR_CHAN_AMBIENT_TEMP,
-                                 &temperature);
-        if (ret < 0) {
-            printk("sensor_channel_get temperature failed: %d\n", ret);
-            k_sleep(K_SECONDS(1));
-            continue;
-        }
-
-		// 湿度传感器通道
-        ret = sensor_channel_get(hdc2010_dev,
-                                 SENSOR_CHAN_HUMIDITY,
-                                 &humidity);
-        if (ret < 0) {
-            printk("sensor_channel_get humidity failed: %d\n", ret);
-            k_sleep(K_SECONDS(1));
-            continue;
-        }
-
-		ret = sensor_channel_get(light_dev,
-								 SENSOR_CHAN_LIGHT,
-								 &light);
-
+		ret = read_hdc2010(hdc2010_dev, &data);
 		if (ret < 0) {
-			printk("sensor_channel_get light failed: %d\n", ret);
+			printk("read_hdc2010 failed: %d\n", ret);
 			k_sleep(K_SECONDS(1));
 			continue;
 		}
 
-        print_temperature(&temperature);
-        print_humidity(&humidity);
-        print_light(&light);
-        printk("--------------------\n");
+		ret = read_opt3001(opt3001_dev, &data);
+		if (ret < 0) {
+			printk("read_opt3001 failed: %d\n", ret);
+			k_sleep(K_SECONDS(1));
+			continue;
+		}
 
-        k_sleep(K_SECONDS(1));
-    }
+		print_agri_data(&data);
+		k_sleep(K_SECONDS(1));
+	}
 
-    return 0;
+	return 0;
 }

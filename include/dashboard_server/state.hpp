@@ -2,7 +2,7 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-24 21:06:42
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-25 09:46:50
+ * @LastEditTime: 2026-05-31 16:09:56
  * @FilePath: /beagle_play/include/dashboard_server/state.hpp
  * @Description: 这个文件是状态相关的结构体定义
  * @
@@ -20,7 +20,9 @@ namespace dashboard {
 
 constexpr int kUdpPort = 9000;
 constexpr int kHttpPort = 8080;
+constexpr int kGatewayControlPort = 9001;
 constexpr std::chrono::seconds kNodeOfflineTimeout{5};
+constexpr std::chrono::seconds kGatewayOfflineTimeout{5};
 constexpr std::size_t kMaxEvents = 50;
 
 long long nowMs();
@@ -42,6 +44,7 @@ struct ActuatorState {
     bool light{false};
     bool pump{false};
     bool fan{false};
+    int fan_pwm_percent{0};
 };
 
 /*** 
@@ -53,6 +56,7 @@ struct ConfigState {
     double light_high{45.0};
     double humidity_low{45.0};
     double temperature_high{32.0};
+    int fan_pwm_percent{100};
     int pump_duration_sec{3};
     int pump_cooldown_sec{60};
 };
@@ -76,13 +80,14 @@ struct NodeState {
  */
 struct SystemState {
     bool running{false};
-    std::string mode{"manual"};
-    std::string gateway{"demo"};
+    std::string mode{"safe"};
+    std::string gateway{"offline"};
+    long long last_gateway_seen_ms{0};
     long long last_update_ms{0};
-    std::map<std::string, NodeState> nodes;
-    ActuatorState actuators;
-    ConfigState config;
-    std::deque<EventEntry> events;
+    std::map<std::string, NodeState> nodes{};
+    ActuatorState actuators{};
+    ConfigState config{};
+    std::deque<EventEntry> events{};
 };
 
 }  // namespace dashboard

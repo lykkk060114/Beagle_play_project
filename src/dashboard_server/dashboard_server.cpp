@@ -117,10 +117,15 @@ void DashboardServer::appendEventLocked(const std::string& level, const std::str
         state_.last_update_ms = nowMs();
     }
 
+void DashboardServer::setFanLocked(bool enabled) {
+        state_.actuators.fan = enabled;
+        state_.actuators.fan_pwm_percent = enabled ? std::clamp(state_.config.fan_pwm_percent, 0, 100) : 0;
+    }
+
 void DashboardServer::setAllActuatorsOffLocked() {
         state_.actuators.light = false;
         state_.actuators.pump = false;
-        state_.actuators.fan = false;
+        setFanLocked(false);
     }
 
 void DashboardServer::refreshNodeOnlineLocked() {
@@ -133,14 +138,41 @@ void DashboardServer::refreshNodeOnlineLocked() {
         }
     }
 
-void DashboardServer::applyAutomaticControlLocked() {
+void DashboardServer::refreshGatewayOnlineLocked() {
+        const long long now = nowMs();
+        const bool online = state_.last_gateway_seen_ms > 0 &&
+                            (now - state_.last_gateway_seen_ms) <=
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    kGatewayOfflineTimeout).count();
+        state_.gateway = online ? "online" : "offline";
+        if (!online) {
+            has_gateway_addr_ = false;
+        }
+    }
+
+void DashboardServer::triggerPumpOnceLocked(const std::string& event_text) {
+        state_.actuators.pump = true;
+        appendEventLocked("ok", event_text);
+        const int duration_sec = std::max(0, state_.config.pump_duration_sec);
+        std::thread([this, duration_sec] {
+            std::this_thread::sleep_for(std::chrono::seconds(duration_sec));
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            state_.actuators.pump = false;
+            state_.last_update_ms = nowMs();
+            sendControlStateLocked();
+        }).detach();
+    }
+
+bool DashboardServer::applyAutomaticControlLocked() {
         if (!state_.running || state_.mode != "auto") {
-            return;
+            return false;
         }
 
+        bool changed = false;
         bool has_online_node = false;
         bool any_light_below = false;
         bool all_light_above = true;
+        bool any_humidity_low = false;
         bool any_temp_high = false;
         bool all_temp_cool = true;
 
@@ -156,6 +188,9 @@ void DashboardServer::applyAutomaticControlLocked() {
             if (!(node.light > state_.config.light_high)) {
                 all_light_above = false;
             }
+            if (node.humidity < state_.config.humidity_low) {
+                any_humidity_low = true;
+            }
             if (node.temperature > state_.config.temperature_high) {
                 any_temp_high = true;
             }
@@ -165,30 +200,92 @@ void DashboardServer::applyAutomaticControlLocked() {
         }
 
         if (!has_online_node) {
-            return;
+            return false;
         }
 
         if (any_light_below && !state_.actuators.light) {
             state_.actuators.light = true;
             appendEventLocked("ok", "Auto light turned on");
+            changed = true;
         } else if (all_light_above && state_.actuators.light) {
             state_.actuators.light = false;
             appendEventLocked("ok", "Auto light turned off");
+            changed = true;
         }
 
         if (any_temp_high && !state_.actuators.fan) {
-            state_.actuators.fan = true;
+            setFanLocked(true);
             appendEventLocked("ok", "Auto fan turned on");
+            changed = true;
         } else if (all_temp_cool && state_.actuators.fan) {
-            state_.actuators.fan = false;
+            setFanLocked(false);
             appendEventLocked("ok", "Auto fan turned off");
+            changed = true;
+        } else if (state_.actuators.fan) {
+            const int next_pwm = std::clamp(state_.config.fan_pwm_percent, 0, 100);
+            if (state_.actuators.fan_pwm_percent != next_pwm) {
+                state_.actuators.fan_pwm_percent = next_pwm;
+                changed = true;
+            }
         }
 
+        const long long now = nowMs();
+        const long long cooldown_ms =
+            static_cast<long long>(std::max(0, state_.config.pump_cooldown_sec)) * 1000LL;
+        const bool pump_ready = last_auto_pump_ms_ == 0 ||
+                                (now - last_auto_pump_ms_) >= cooldown_ms;
+        if (any_humidity_low && !state_.actuators.pump && pump_ready) {
+            last_auto_pump_ms_ = now;
+            triggerPumpOnceLocked("Auto pump triggered once");
+            changed = true;
+        }
+
+        return changed;
+    }
+
+void DashboardServer::rememberGatewayAddressLocked(const sockaddr_in& sender) {
+        last_gateway_addr_ = sender;
+        last_gateway_addr_.sin_port = htons(kGatewayControlPort);
+        has_gateway_addr_ = true;
+        state_.last_gateway_seen_ms = nowMs();
+        state_.gateway = "online";
+    }
+
+std::string DashboardServer::buildControlJsonLocked() {
+        std::ostringstream oss;
+        oss << "{";
+        oss << "\"type\":\"control_state\",";
+        oss << "\"seq\":" << ++control_seq_ << ",";
+        oss << "\"running\":" << jsonBool(state_.running) << ",";
+        oss << "\"mode\":\"" << jsonEscape(state_.mode) << "\",";
+        oss << "\"light\":" << jsonBool(state_.actuators.light) << ",";
+        oss << "\"pump\":" << jsonBool(state_.actuators.pump) << ",";
+        oss << "\"fan\":" << jsonBool(state_.actuators.fan) << ",";
+        oss << "\"pwm\":" << state_.actuators.fan_pwm_percent;
+        oss << "}";
+        return oss.str();
+    }
+
+void DashboardServer::sendControlStateLocked() {
+        refreshGatewayOnlineLocked();
+        if (!has_gateway_addr_ || udp_sock_ < 0) {
+            return;
+        }
+
+        const std::string payload = buildControlJsonLocked();
+        const ssize_t sent = sendto(udp_sock_, payload.c_str(), payload.size(), 0,
+                                    reinterpret_cast<const sockaddr*>(&last_gateway_addr_),
+                                    sizeof(last_gateway_addr_));
+        if (sent < 0) {
+            perror("sendto(control)");
+        }
     }
 
 std::string DashboardServer::buildStatusJsonLocked() {
+        refreshGatewayOnlineLocked();
         refreshNodeOnlineLocked();
         applyAutomaticControlLocked();
+        sendControlStateLocked();
 
         std::ostringstream oss;
         oss << "{";
@@ -218,7 +315,8 @@ std::string DashboardServer::buildStatusJsonLocked() {
         oss << "\"actuators\":{";
         oss << "\"light\":" << jsonBool(state_.actuators.light) << ",";
         oss << "\"pump\":" << jsonBool(state_.actuators.pump) << ",";
-        oss << "\"fan\":" << jsonBool(state_.actuators.fan);
+        oss << "\"fan\":" << jsonBool(state_.actuators.fan) << ",";
+        oss << "\"fan_pwm_percent\":" << state_.actuators.fan_pwm_percent;
         oss << "},";
 
         oss << "\"config\":{";
@@ -226,6 +324,7 @@ std::string DashboardServer::buildStatusJsonLocked() {
         oss << "\"light_high\":" << jsonNumber(state_.config.light_high) << ",";
         oss << "\"humidity_low\":" << jsonNumber(state_.config.humidity_low) << ",";
         oss << "\"temperature_high\":" << jsonNumber(state_.config.temperature_high) << ",";
+        oss << "\"fan_pwm_percent\":" << state_.config.fan_pwm_percent << ",";
         oss << "\"pump_duration_sec\":" << state_.config.pump_duration_sec << ",";
         oss << "\"pump_cooldown_sec\":" << state_.config.pump_cooldown_sec;
         oss << "},";
@@ -271,7 +370,6 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
         if (request.method == "POST" && request.path == "/api/system/start") {
             std::lock_guard<std::mutex> lock(state_mutex_);
             state_.running = true;
-            state_.gateway = "online";
             appendEventLocked("ok", "System started");
             applyAutomaticControlLocked();
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
@@ -333,12 +431,17 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
                 !parseDoubleToken(body["light_high"], next.light_high) ||
                 !parseDoubleToken(body["humidity_low"], next.humidity_low) ||
                 !parseDoubleToken(body["temperature_high"], next.temperature_high) ||
+                !parseIntToken(body["fan_pwm_percent"], next.fan_pwm_percent) ||
                 !parseIntToken(body["pump_duration_sec"], next.pump_duration_sec) ||
                 !parseIntToken(body["pump_cooldown_sec"], next.pump_cooldown_sec)) {
                 return {400, "application/json; charset=utf-8", buildErrorJson(400, "invalid config values")};
             }
+            next.fan_pwm_percent = std::clamp(next.fan_pwm_percent, 0, 100);
             std::lock_guard<std::mutex> lock(state_mutex_);
             state_.config = next;
+            if (state_.actuators.fan) {
+                setFanLocked(true);
+            }
             appendEventLocked("ok", "Config updated");
             applyAutomaticControlLocked();
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
@@ -383,19 +486,11 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
                 if (action == "once") {
                     return {400, "application/json; charset=utf-8", buildErrorJson(400, "fan does not support once")};
                 }
-                state_.actuators.fan = (action == "on");
+                setFanLocked(action == "on");
                 appendEventLocked("ok", std::string("Fan turned ") + (state_.actuators.fan ? "on" : "off"));
             } else if (device == "pump") {
                 if (action == "once") {
-                    state_.actuators.pump = true;
-                    appendEventLocked("ok", "Pump triggered once");
-                    const int duration_sec = std::max(0, state_.config.pump_duration_sec);
-                    std::thread([this, duration_sec] {
-                        std::this_thread::sleep_for(std::chrono::seconds(duration_sec));
-                        std::lock_guard<std::mutex> lock(state_mutex_);
-                        state_.actuators.pump = false;
-                        state_.last_update_ms = nowMs();
-                    }).detach();
+                    triggerPumpOnceLocked("Pump triggered once");
                 } else {
                     state_.actuators.pump = (action == "on");
                     appendEventLocked("ok", std::string("Pump turned ") + (state_.actuators.pump ? "on" : "off"));
@@ -449,7 +544,7 @@ void DashboardServer::udpLoop() {
             std::string parse_error;
             if (!parseFlatJsonObject(payload, data, parse_error)) {
                 std::lock_guard<std::mutex> lock(state_mutex_);
-                state_.gateway = "online";
+                rememberGatewayAddressLocked(sender);
                 appendEventLocked("warn", "UDP JSON parse error");
                 continue;
             }
@@ -457,7 +552,7 @@ void DashboardServer::udpLoop() {
             const auto node_it = data.find("node");
             if (node_it == data.end()) {
                 std::lock_guard<std::mutex> lock(state_mutex_);
-                state_.gateway = "online";
+                rememberGatewayAddressLocked(sender);
                 appendEventLocked("warn", "UDP packet missing node");
                 continue;
             }
@@ -471,7 +566,7 @@ void DashboardServer::udpLoop() {
                 !parseDoubleToken(data["light"], snapshot.light) ||
                 !parseIntToken(data["rssi"], snapshot.rssi)) {
                 std::lock_guard<std::mutex> lock(state_mutex_);
-                state_.gateway = "online";
+                rememberGatewayAddressLocked(sender);
                 appendEventLocked("warn", "UDP packet has invalid sensor values");
                 continue;
             }
@@ -479,7 +574,7 @@ void DashboardServer::udpLoop() {
             const std::string node_name = trim(node_it->second);
             {
                 std::lock_guard<std::mutex> lock(state_mutex_);
-                state_.gateway = "online";
+                rememberGatewayAddressLocked(sender);
                 state_.nodes[node_name].online = true;
                 state_.nodes[node_name].temperature = snapshot.temperature;
                 state_.nodes[node_name].humidity = snapshot.humidity;
@@ -488,6 +583,7 @@ void DashboardServer::udpLoop() {
                 state_.nodes[node_name].last_seen_ms = snapshot.last_seen_ms;
                 state_.last_update_ms = nowMs();
                 applyAutomaticControlLocked();
+                sendControlStateLocked();
             }
         }
     }

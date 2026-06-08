@@ -2,7 +2,7 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-24 21:14:58
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-25 11:31:41
+ * @LastEditTime: 2026-05-31 14:59:09
  * @FilePath: /beagle_play/include/dashboard_server/dashboard_server.hpp
  * @Description: 放置头文件在其中, 并在这里定义DashboardServer类
  * @
@@ -54,17 +54,29 @@ public:
 private:
     int udp_sock_{-1};
     int http_sock_{-1};
+    sockaddr_in last_gateway_addr_{};
+    bool has_gateway_addr_{false};
+    unsigned long control_seq_{0};
+    long long last_auto_pump_ms_{0};
     std::string index_html_{};
     std::mutex state_mutex_{};
     // 整个后端维护的数据
     SystemState state_{};
 
+private:
+
     bool openUdpSocket();
     bool openHttpSocket();
     void appendEventLocked(const std::string& level, const std::string& text);
     void setAllActuatorsOffLocked();
+    void setFanLocked(bool enabled);
     void refreshNodeOnlineLocked();
-    void applyAutomaticControlLocked();
+    void refreshGatewayOnlineLocked();
+    bool applyAutomaticControlLocked();
+    void triggerPumpOnceLocked(const std::string& event_text);
+    void rememberGatewayAddressLocked(const sockaddr_in& sender);
+    std::string buildControlJsonLocked();
+    void sendControlStateLocked();
     std::string buildStatusJsonLocked();
     std::string buildErrorJson(int code, const std::string& message);
 
