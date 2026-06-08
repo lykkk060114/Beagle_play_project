@@ -21,6 +21,7 @@ namespace dashboard {
 constexpr int kUdpPort = 9000;
 constexpr int kHttpPort = 8080;
 constexpr int kGatewayControlPort = 9001;
+constexpr int kAutoFanPwmPercent = 50;
 constexpr std::chrono::seconds kNodeOfflineTimeout{5};
 constexpr std::chrono::seconds kGatewayOfflineTimeout{5};
 constexpr std::size_t kMaxEvents = 50;
@@ -45,6 +46,7 @@ struct ActuatorState {
     bool pump{false};
     bool fan{false};
     int fan_pwm_percent{0};
+    int manual_fan_pwm_percent{50};
 };
 
 /*** 
@@ -56,7 +58,6 @@ struct ConfigState {
     double light_high{45.0};
     double humidity_low{45.0};
     double temperature_high{32.0};
-    int fan_pwm_percent{100};
     int pump_duration_sec{3};
     int pump_cooldown_sec{60};
 };

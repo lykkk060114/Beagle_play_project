@@ -119,7 +119,19 @@ void DashboardServer::appendEventLocked(const std::string& level, const std::str
 
 void DashboardServer::setFanLocked(bool enabled) {
         state_.actuators.fan = enabled;
-        state_.actuators.fan_pwm_percent = enabled ? std::clamp(state_.config.fan_pwm_percent, 0, 100) : 0;
+        if (!enabled) {
+            state_.actuators.fan_pwm_percent = 0;
+            return;
+        }
+        state_.actuators.fan_pwm_percent =
+            state_.mode == "auto" ? kAutoFanPwmPercent : state_.actuators.manual_fan_pwm_percent;
+    }
+
+void DashboardServer::setManualFanPwmLocked(int percent) {
+        state_.actuators.manual_fan_pwm_percent = std::clamp(percent, 0, 100);
+        if (state_.actuators.fan && state_.mode == "manual") {
+            setFanLocked(true);
+        }
     }
 
 void DashboardServer::setAllActuatorsOffLocked() {
@@ -222,7 +234,7 @@ bool DashboardServer::applyAutomaticControlLocked() {
             appendEventLocked("ok", "Auto fan turned off");
             changed = true;
         } else if (state_.actuators.fan) {
-            const int next_pwm = std::clamp(state_.config.fan_pwm_percent, 0, 100);
+            const int next_pwm = kAutoFanPwmPercent;
             if (state_.actuators.fan_pwm_percent != next_pwm) {
                 state_.actuators.fan_pwm_percent = next_pwm;
                 changed = true;
@@ -316,7 +328,9 @@ std::string DashboardServer::buildStatusJsonLocked() {
         oss << "\"light\":" << jsonBool(state_.actuators.light) << ",";
         oss << "\"pump\":" << jsonBool(state_.actuators.pump) << ",";
         oss << "\"fan\":" << jsonBool(state_.actuators.fan) << ",";
-        oss << "\"fan_pwm_percent\":" << state_.actuators.fan_pwm_percent;
+        oss << "\"fan_pwm_percent\":" << state_.actuators.fan_pwm_percent << ",";
+        oss << "\"manual_fan_pwm_percent\":" << state_.actuators.manual_fan_pwm_percent << ",";
+        oss << "\"auto_fan_pwm_percent\":" << kAutoFanPwmPercent;
         oss << "},";
 
         oss << "\"config\":{";
@@ -324,7 +338,6 @@ std::string DashboardServer::buildStatusJsonLocked() {
         oss << "\"light_high\":" << jsonNumber(state_.config.light_high) << ",";
         oss << "\"humidity_low\":" << jsonNumber(state_.config.humidity_low) << ",";
         oss << "\"temperature_high\":" << jsonNumber(state_.config.temperature_high) << ",";
-        oss << "\"fan_pwm_percent\":" << state_.config.fan_pwm_percent << ",";
         oss << "\"pump_duration_sec\":" << state_.config.pump_duration_sec << ",";
         oss << "\"pump_cooldown_sec\":" << state_.config.pump_cooldown_sec;
         oss << "},";
@@ -411,6 +424,8 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
             state_.mode = mode;
             if (state_.mode == "safe") {
                 setAllActuatorsOffLocked();
+            } else if (state_.actuators.fan) {
+                setFanLocked(true);
             }
             appendEventLocked("ok", "Mode changed to " + state_.mode);
             applyAutomaticControlLocked();
@@ -431,17 +446,12 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
                 !parseDoubleToken(body["light_high"], next.light_high) ||
                 !parseDoubleToken(body["humidity_low"], next.humidity_low) ||
                 !parseDoubleToken(body["temperature_high"], next.temperature_high) ||
-                !parseIntToken(body["fan_pwm_percent"], next.fan_pwm_percent) ||
                 !parseIntToken(body["pump_duration_sec"], next.pump_duration_sec) ||
                 !parseIntToken(body["pump_cooldown_sec"], next.pump_cooldown_sec)) {
                 return {400, "application/json; charset=utf-8", buildErrorJson(400, "invalid config values")};
             }
-            next.fan_pwm_percent = std::clamp(next.fan_pwm_percent, 0, 100);
             std::lock_guard<std::mutex> lock(state_mutex_);
             state_.config = next;
-            if (state_.actuators.fan) {
-                setFanLocked(true);
-            }
             appendEventLocked("ok", "Config updated");
             applyAutomaticControlLocked();
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
@@ -467,8 +477,11 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
             if (device != "light" && device != "pump" && device != "fan") {
                 return {400, "application/json; charset=utf-8", buildErrorJson(400, "invalid device")};
             }
-            if (action != "on" && action != "off" && action != "once") {
+            if (action != "on" && action != "off" && action != "once" && action != "pwm") {
                 return {400, "application/json; charset=utf-8", buildErrorJson(400, "invalid action")};
+            }
+            if (action == "pwm" && device != "fan") {
+                return {400, "application/json; charset=utf-8", buildErrorJson(400, "pwm action only supports fan")};
             }
 
             std::lock_guard<std::mutex> lock(state_mutex_);
@@ -486,8 +499,21 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
                 if (action == "once") {
                     return {400, "application/json; charset=utf-8", buildErrorJson(400, "fan does not support once")};
                 }
-                setFanLocked(action == "on");
-                appendEventLocked("ok", std::string("Fan turned ") + (state_.actuators.fan ? "on" : "off"));
+                if (action == "pwm") {
+                    if (state_.mode != "manual") {
+                        return {403, "application/json; charset=utf-8",
+                                buildErrorJson(403, "fan pwm can only be adjusted in manual mode")};
+                    }
+                    int pwm_percent = 0;
+                    if (!parseIntToken(body["pwm"], pwm_percent)) {
+                        return {400, "application/json; charset=utf-8", buildErrorJson(400, "invalid pwm value")};
+                    }
+                    setManualFanPwmLocked(pwm_percent);
+                    appendEventLocked("ok", "Fan PWM set to " + std::to_string(state_.actuators.manual_fan_pwm_percent) + "%");
+                } else {
+                    setFanLocked(action == "on");
+                    appendEventLocked("ok", std::string("Fan turned ") + (state_.actuators.fan ? "on" : "off"));
+                }
             } else if (device == "pump") {
                 if (action == "once") {
                     triggerPumpOnceLocked("Pump triggered once");

@@ -317,6 +317,32 @@
       box-shadow: 0 0 0 3px rgba(93, 169, 255, 0.12);
     }
 
+    input[type="range"] {
+      accent-color: var(--accent);
+      padding: 0;
+    }
+
+    .fan-pwm-control {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+
+    .fan-pwm-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .fan-pwm-value {
+      color: var(--text);
+      font-weight: 700;
+    }
+
     .btn-row {
       display: flex;
       flex-wrap: wrap;
@@ -443,7 +469,6 @@
           <div class="field"><label>光照恢复值</label><input id="light_high" type="number" step="0.1"></div>
           <div class="field"><label>湿度下限</label><input id="humidity_low" type="number" step="0.1"></div>
           <div class="field"><label>温度上限</label><input id="temperature_high" type="number" step="0.1"></div>
-          <div class="field"><label>风扇 PWM(%)</label><input id="fan_pwm_percent" type="number" step="1" min="0" max="100"></div>
           <div class="field"><label>喷水时长(秒)</label><input id="pump_duration_sec" type="number" step="1" min="0"></div>
           <div class="field"><label>喷水冷却(秒)</label><input id="pump_cooldown_sec" type="number" step="1" min="0"></div>
         </div>
@@ -471,6 +496,15 @@
           <button class="bad" onclick="controlDevice('pump','off')">水泵急停</button>
           <button onclick="controlDevice('fan','on')">开风扇</button>
           <button onclick="controlDevice('fan','off')">关风扇</button>
+        </div>
+        <div class="fan-pwm-control">
+          <div class="fan-pwm-head">
+            <span>风扇 PWM</span>
+            <span id="fanPwmValue" class="fan-pwm-value">50%</span>
+          </div>
+          <input id="fanPwmRange" type="range" min="0" max="100" step="1" value="50"
+                 oninput="updateFanPwmPreview()" onchange="setFanPwmFromSlider()">
+          <div id="fanPwmHint" class="foot">手动模式下可调；自动模式固定 50%。</div>
         </div>
         <div class="foot">当前仅修改后端状态变量，不直接控制真实 GPIO。</div>
       </div>
@@ -522,6 +556,29 @@
       }
     }
 
+    function syncFanPwmControls(data) {
+      const actuators = data.actuators || {};
+      const mode = data.mode || 'manual';
+      const range = byId('fanPwmRange');
+      const manualPwm = Number(actuators.manual_fan_pwm_percent ?? 50);
+      const autoPwm = Number(actuators.auto_fan_pwm_percent ?? 50);
+
+      if (document.activeElement !== range) {
+        range.value = manualPwm;
+      }
+      range.disabled = mode !== 'manual';
+
+      byId('fanPwmValue').textContent = mode === 'auto' ? `固定 ${autoPwm}%` : `${range.value}%`;
+      byId('fanPwmHint').textContent =
+        mode === 'manual' ? '手动模式下可调，开风扇时按该 PWM 下发。' :
+        mode === 'auto' ? `自动模式固定 ${autoPwm}%。` :
+        '安全模式下不可调。';
+    }
+
+    function updateFanPwmPreview() {
+      byId('fanPwmValue').textContent = `${byId('fanPwmRange').value}%`;
+    }
+
     function updateModeButtons(mode) {
       for (const id of ['mode_auto', 'mode_manual', 'mode_safe']) {
         byId(id).classList.remove('active');
@@ -532,6 +589,7 @@
       for (const btn of document.querySelectorAll('#manualControl button')) {
         btn.disabled = disableManual && btn.innerText !== '保存阈值';
       }
+      byId('fanPwmRange').disabled = mode !== 'manual';
     }
 
     function valueClass(kind, node, config) {
@@ -689,11 +747,11 @@
       setInputIfIdle('light_high', config.light_high ?? '');
       setInputIfIdle('humidity_low', config.humidity_low ?? '');
       setInputIfIdle('temperature_high', config.temperature_high ?? '');
-      setInputIfIdle('fan_pwm_percent', config.fan_pwm_percent ?? '');
       setInputIfIdle('pump_duration_sec', config.pump_duration_sec ?? '');
       setInputIfIdle('pump_cooldown_sec', config.pump_cooldown_sec ?? '');
 
       updateModeButtons(data.mode || 'manual');
+      syncFanPwmControls(data);
       renderNodes(data.nodes || {}, config);
       renderActuators(data);
       renderEvents(data.events || []);
@@ -739,7 +797,6 @@
           light_high: Number(byId('light_high').value),
           humidity_low: Number(byId('humidity_low').value),
           temperature_high: Number(byId('temperature_high').value),
-          fan_pwm_percent: Number(byId('fan_pwm_percent').value),
           pump_duration_sec: Number(byId('pump_duration_sec').value),
           pump_cooldown_sec: Number(byId('pump_cooldown_sec').value),
         };
@@ -759,6 +816,23 @@
         await loadStatus();
       } catch (err) {
         setConnection(false, err.message);
+      }
+    }
+
+    async function setFanPwmFromSlider() {
+      try {
+        await api('/api/control', {
+          method: 'POST',
+          body: JSON.stringify({
+            device: 'fan',
+            action: 'pwm',
+            pwm: Number(byId('fanPwmRange').value),
+          }),
+        });
+        await loadStatus();
+      } catch (err) {
+        setConnection(false, err.message);
+        await loadStatus();
       }
     }
 

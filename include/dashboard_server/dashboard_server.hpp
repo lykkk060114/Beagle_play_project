@@ -70,6 +70,7 @@ private:
     void appendEventLocked(const std::string& level, const std::string& text);
     void setAllActuatorsOffLocked();
     void setFanLocked(bool enabled);
+    void setManualFanPwmLocked(int percent);
     void refreshNodeOnlineLocked();
     void refreshGatewayOnlineLocked();
     bool applyAutomaticControlLocked();
