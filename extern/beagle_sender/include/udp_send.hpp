@@ -44,14 +44,14 @@ namespace BeagleSender {
     inline std::string build_json(const SensorData& data, int seq) {
         std::ostringstream oss;
 
-        oss << "\033[32m{" 
+        oss << "{" 
             << "\"node\":\"" << data.node << "\","
             << "\"light\":" << data.light << ","
             << "\"temperature\":" << data.temperature << ","
             << "\"humidity\":" << data.humidity << ","
             << "\"rssi\":" << data.rssi << ","
             << "\"seq\":" << seq
-            << "\033[0m}";
+            << "}";
         return oss.str();
     }
 
