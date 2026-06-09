@@ -1,13 +1,14 @@
 /*** 
  * @Author: LYK && 2586356361@qq.com
- * @Date: 2026-06-08 21:16:29
+ * @Date: 2026-05-25 23:00:58
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-06-08 21:16:47
- * @FilePath: /beagle_play/extern/rtos_apps/include/sensor_node/utils.h
+ * @LastEditTime: 2026-05-25 23:07:35
+ * @FilePath: /beagle_sender_remote/rtos_apps/include/sensor_node/utils.h
  * @Description: 
  * @
  * @Copyright (c) 2026  All Rights Reserved. 
  */
+
 #ifndef SENSOR_NODE_UTILS_H
 #define SENSOR_NODE_UTILS_H
 

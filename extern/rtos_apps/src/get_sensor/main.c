@@ -2,8 +2,8 @@
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-25 17:10:35
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-06-08 21:24:29
- * @FilePath: /beagle_play/extern/rtos_apps/src/get_sensor/main.c
+ * @LastEditTime: 2026-06-08 16:45:11
+ * @FilePath: /beagle_play/extern/beagle_sender_remote/rtos_apps/src/get_sensor/main.c
  * @Description: 读取传感器的值并且通过udp发送出来
  * 
  * Copyright (c) 2026  All Rights Reserved. 
@@ -16,7 +16,6 @@
 
 // 头文件
 #include <sensor_node/utils.h>
-
 
 static int abs_val2(int val2) {
     if (val2 < 0) {
