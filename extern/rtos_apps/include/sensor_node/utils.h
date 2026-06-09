@@ -1,12 +1,12 @@
-/*** 
+/***
  * @Author: LYK && 2586356361@qq.com
  * @Date: 2026-05-25 23:00:58
  * @LastEditors: LYK && 2586356361@qq.com
- * @LastEditTime: 2026-05-25 23:07:35
- * @FilePath: /beagle_sender_remote/rtos_apps/include/sensor_node/utils.h
- * @Description: 
- * @
- * @Copyright (c) 2026  All Rights Reserved. 
+ * @LastEditTime: 2026-06-09
+ * @FilePath: /beagle_play/extern/rtos_apps/include/sensor_node/utils.h
+ * @Description:
+ *
+ * Copyright (c) 2026  All Rights Reserved.
  */
 
 #ifndef SENSOR_NODE_UTILS_H
@@ -14,13 +14,13 @@
 
 #include <stddef.h>
 
-#include <zephyr/kernel.h>
-#include <zephyr/sys/printk.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
-#include <zephyr/net/socket.h>
+#include <zephyr/kernel.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_ip.h>
+#include <zephyr/net/socket.h>
+#include <zephyr/sys/printk.h>
 
 #include "types.h"
 
@@ -52,8 +52,11 @@ static int setup_ipv6_addr(void);
 static int create_udp_socket(struct sockaddr_in6 *dest_addr);
 static int read_hdc2010(const struct device *dev, struct sensor_data *data);
 static int read_opt3001(const struct device *dev, struct sensor_data *data);
-static int build_payload(char *buf, size_t buf_size, const struct sensor_data *data, int seq);
+static int build_payload(char *buf,
+                         size_t buf_size,
+                         const struct sensor_data *data,
+                         int rssi,
+                         int seq);
 static int abs_val2(int val2);
-static void print_light(const struct sensor_value *light);
 
 #endif // SENSOR_NODE_UTILS_H
