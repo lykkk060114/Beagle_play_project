@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include <sensor_node/utils.h>
+#include <oled_show/oled_show.h>
 
 #define UDP_TARGET_IPV6_ADDR "ff02::1"
 
@@ -188,6 +189,7 @@ int main(void)
     }
 
     printk("Sensor devices ready: %s, %s\n", HDC2010_DEV_NAME, LIGHT_DEV_NAME);
+    oled_show_init();
 
     if (setup_ipv6_addr() < 0) {
         printk("Failed to setup IPv6 address\n");
@@ -238,6 +240,7 @@ int main(void)
         }
 
         printk("JSON payload: %s\n", payload);
+        oled_show_sensor(&data, rssi, seq);
 
         ret = sendto(sock,
                      payload,
