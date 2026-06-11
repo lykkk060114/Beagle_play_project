@@ -273,7 +273,10 @@ std::string DashboardServer::buildControlJsonLocked() {
         oss << "\"light\":" << jsonBool(state_.actuators.light) << ",";
         oss << "\"pump\":" << jsonBool(state_.actuators.pump) << ",";
         oss << "\"fan\":" << jsonBool(state_.actuators.fan) << ",";
-        oss << "\"pwm\":" << state_.actuators.fan_pwm_percent;
+        oss << "\"pwm\":" << state_.actuators.fan_pwm_percent << ",";
+        oss << "\"fan_on\":" << jsonBool(state_.actuators.fan) << ",";
+        oss << "\"fan_pwm\":" << state_.actuators.fan_pwm_percent << ",";
+        oss << "\"fan_auto\":" << jsonBool(state_.running && state_.mode == "auto");
         oss << "}";
         return oss.str();
     }
@@ -385,6 +388,7 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
             state_.running = true;
             appendEventLocked("ok", "System started");
             applyAutomaticControlLocked();
+            sendControlStateLocked();
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
         }
 
@@ -393,10 +397,10 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
             state_.running = false;
             setAllActuatorsOffLocked();
             appendEventLocked("ok", "System stopped");
+            sendControlStateLocked();
             return {200, "application/json; charset=utf-8", buildStatusJsonLocked()};
         }
 
-        // 当前端重启网关。 后端只是记录
         if (request.method == "POST" && request.path == "/api/system/restart_gateway") {
             std::lock_guard<std::mutex> lock(state_mutex_);
             appendEventLocked("ok", "Gateway restart requested");

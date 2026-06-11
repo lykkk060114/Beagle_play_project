@@ -289,6 +289,77 @@
     .meter.warn span { background: var(--warn); }
     .meter.ok span { background: var(--ok); }
 
+    .threshold-meter {
+      margin-top: 12px;
+    }
+
+    .threshold-track {
+      position: relative;
+      height: 12px;
+      border-radius: 999px;
+      background: #182433;
+      overflow: visible;
+    }
+
+    .threshold-range {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: var(--safe-start, 0%);
+      width: var(--safe-width, 100%);
+      border-radius: 999px;
+      background: rgba(57, 217, 138, 0.24);
+    }
+
+    .threshold-marker {
+      position: absolute;
+      top: -3px;
+      bottom: -3px;
+      left: var(--pos, 0%);
+      width: 2px;
+      background: var(--marker-color, var(--warn));
+      transform: translateX(-1px);
+    }
+
+    .threshold-current {
+      position: absolute;
+      top: 50%;
+      left: var(--pos, 0%);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid #0d1620;
+      background: var(--current-color, var(--accent));
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 3px rgba(93, 169, 255, 0.16);
+    }
+
+    .threshold-labels {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    .threshold-labels span:nth-child(2) { text-align: center; }
+    .threshold-labels span:nth-child(3) { text-align: right; }
+
+    .manual-placeholder {
+      color: var(--muted);
+      padding: 12px;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 13px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
     .form-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -489,6 +560,8 @@
 
       <div id="manualControl" class="section">
         <h2>手动控制</h2>
+        <div id="manualControlPlaceholder" class="manual-placeholder">切换到手动模式后显示灯、水泵、风扇控制。</div>
+        <div id="manualControlBody" class="hidden">
         <div class="btn-row">
           <button onclick="controlDevice('light','on')">开灯</button>
           <button onclick="controlDevice('light','off')">关灯</button>
@@ -506,7 +579,8 @@
                  oninput="updateFanPwmPreview()" onchange="setFanPwmFromSlider()">
           <div id="fanPwmHint" class="foot">手动模式下可调；自动模式固定 50%。</div>
         </div>
-        <div class="foot">当前仅修改后端状态变量，不直接控制真实 GPIO。</div>
+        </div>
+        <div class="foot">手动模式下才允许直接控制执行器。</div>
       </div>
     </section>
 
@@ -527,12 +601,17 @@
       return value ? 'ON' : 'OFF';
     }
 
+    function fmtRunning(value) {
+      return value === true ? '运行中' : '已停止';
+    }
+
     function fmtTime(ms) {
       if (!ms) return '-';
       return new Date(ms).toLocaleString();
     }
 
     function fmtNumber(value, digits = 1) {
+      if (value === null || value === undefined) return '-';
       const number = Number(value);
       return Number.isFinite(number) ? number.toFixed(digits) : '-';
     }
@@ -541,6 +620,11 @@
       const number = Number(value);
       if (!Number.isFinite(number) || max <= min) return 0;
       return Math.max(0, Math.min(100, ((number - min) / (max - min)) * 100));
+    }
+
+    function finiteOr(value, fallback) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : fallback;
     }
 
     function setConnection(ok, text) {
@@ -585,10 +669,8 @@
       }
       const activeId = mode === 'auto' ? 'mode_auto' : mode === 'manual' ? 'mode_manual' : 'mode_safe';
       byId(activeId).classList.add('active');
-      const disableManual = mode === 'safe';
-      for (const btn of document.querySelectorAll('#manualControl button')) {
-        btn.disabled = disableManual && btn.innerText !== '保存阈值';
-      }
+      byId('manualControlBody').classList.toggle('hidden', mode !== 'manual');
+      byId('manualControlPlaceholder').classList.toggle('hidden', mode === 'manual');
       byId('fanPwmRange').disabled = mode !== 'manual';
     }
 
@@ -641,18 +723,49 @@
       return nodes.length > 0 && nodes.every((node) => fn(node));
     }
 
+    function thresholdMeter({ current, min, max, safeStart, safeEnd, markerStart, markerEnd, labels, currentClass }) {
+      const start = finiteOr(min, 0);
+      const end = Math.max(finiteOr(max, start + 1), start + 1);
+      const currentPos = clampPercent(current, start, end);
+      const safeStartPos = clampPercent(safeStart, start, end);
+      const safeEndPos = clampPercent(safeEnd, start, end);
+      const safeLeft = Math.min(safeStartPos, safeEndPos);
+      const safeWidth = Math.max(0, Math.abs(safeEndPos - safeStartPos));
+      const markerA = clampPercent(markerStart ?? safeStart, start, end);
+      const markerB = clampPercent(markerEnd ?? safeEnd, start, end);
+      const currentColor =
+        currentClass === 'bad' ? 'var(--bad)' :
+        currentClass === 'warn' ? 'var(--warn)' :
+        currentClass === 'ok' ? 'var(--ok)' : 'var(--accent)';
+
+      return `
+        <div class="threshold-meter">
+          <div class="threshold-track" style="--safe-start:${safeLeft}%; --safe-width:${safeWidth}%;">
+            <span class="threshold-range"></span>
+            <span class="threshold-marker" style="--pos:${markerA}%; --marker-color:var(--warn);"></span>
+            <span class="threshold-marker" style="--pos:${markerB}%; --marker-color:var(--ok);"></span>
+            <span class="threshold-current" style="--pos:${currentPos}%; --current-color:${currentColor};"></span>
+          </div>
+          <div class="threshold-labels">
+            <span>${labels[0]}</span>
+            <span>${labels[1]}</span>
+            <span>${labels[2]}</span>
+          </div>
+        </div>`;
+    }
+
     function renderActuators(data) {
       const host = byId('actuatorCards');
       const summary = byId('autoSummary');
       const actuators = data.actuators || {};
       const config = data.config || {};
       const online = onlineNodes(data);
-      const nodes = online.length ? online : Object.values(data.nodes || {});
+      const nodes = online;
       const isAuto = data.running && data.mode === 'auto';
       const noNode = nodes.length === 0;
 
       summary.className = 'badge ' + (isAuto ? 'ok' : data.mode === 'safe' ? 'bad' : 'warn');
-      summary.textContent = isAuto ? '自动模式运行中' : data.mode === 'safe' ? '安全模式' : '手动模式';
+      summary.textContent = data.running ? (isAuto ? '自动模式运行中' : '系统运行中') : '系统已停止';
 
       const lightLow = anyNode(nodes, (node) => Number(node.light) < Number(config.light_low));
       const lightRecovered = allNode(nodes, (node) => Number(node.light) > Number(config.light_high));
@@ -660,9 +773,17 @@
       const tempRecovered = allNode(nodes, (node) => Number(node.temperature) <= Number(config.temperature_high) - 2);
       const humidityLow = anyNode(nodes, (node) => Number(node.humidity) < Number(config.humidity_low));
 
-      const minLight = nodes.reduce((min, node) => Math.min(min, Number(node.light)), Number.POSITIVE_INFINITY);
-      const maxTemp = nodes.reduce((max, node) => Math.max(max, Number(node.temperature)), Number.NEGATIVE_INFINITY);
-      const minHumidity = nodes.reduce((min, node) => Math.min(min, Number(node.humidity)), Number.POSITIVE_INFINITY);
+      const minLight = noNode ? null : nodes.reduce((min, node) => Math.min(min, Number(node.light)), Number.POSITIVE_INFINITY);
+      const maxTemp = noNode ? null : nodes.reduce((max, node) => Math.max(max, Number(node.temperature)), Number.NEGATIVE_INFINITY);
+      const minHumidity = noNode ? null : nodes.reduce((min, node) => Math.min(min, Number(node.humidity)), Number.POSITIVE_INFINITY);
+      const lightLowValue = finiteOr(config.light_low, 0);
+      const lightHighValue = finiteOr(config.light_high, Math.max(lightLowValue + 1, 1));
+      const tempHighValue = finiteOr(config.temperature_high, 30);
+      const tempRecoverValue = tempHighValue - 2;
+      const humidityLowValue = finiteOr(config.humidity_low, 0);
+      const lightMax = Math.max(lightHighValue * 1.4, lightHighValue + 1, 1);
+      const tempMin = Math.min(0, tempRecoverValue - 5);
+      const tempMax = Math.max(tempHighValue + 5, 40);
 
       const cards = [
         {
@@ -674,9 +795,16 @@
             isAuto && lightLow ? '光照低于下限，补光灯开启' :
             isAuto && lightRecovered ? '光照已高于恢复值' :
             isAuto ? '光照处于阈值区间' : '由手动控制状态显示',
-          rule: `当前最低 ${fmtNumber(minLight)} / 下限 ${fmtNumber(config.light_low)} / 恢复 ${fmtNumber(config.light_high)}`,
-          meter: clampPercent(minLight, 0, Math.max(Number(config.light_high) * 1.4, 1)),
-          meterClass: lightLow ? 'warn' : 'ok',
+          rule: `当前最低 ${fmtNumber(minLight)} / 下限 ${fmtNumber(lightLowValue)} / 恢复 ${fmtNumber(lightHighValue)}`,
+          meterHtml: noNode ? '' : thresholdMeter({
+            current: minLight,
+            min: 0,
+            max: lightMax,
+            safeStart: lightLowValue,
+            safeEnd: lightHighValue,
+            labels: [`当前 ${fmtNumber(minLight)}`, `下限 ${fmtNumber(lightLowValue)}`, `恢复 ${fmtNumber(lightHighValue)}`],
+            currentClass: lightLow ? 'warn' : 'ok',
+          }),
         },
         {
           key: 'fan',
@@ -688,9 +816,18 @@
             isAuto && tempHigh ? '温度高于上限，风扇开启' :
             isAuto && tempRecovered ? '温度已回落到恢复区间' :
             isAuto ? '温度接近控制区间' : '由手动控制状态显示',
-          rule: `当前最高 ${fmtNumber(maxTemp)} ℃ / 上限 ${fmtNumber(config.temperature_high)} ℃ / 恢复 ${fmtNumber(Number(config.temperature_high) - 2)} ℃ / PWM ${Number(actuators.fan_pwm_percent ?? 0)}%`,
-          meter: clampPercent(maxTemp, 0, Math.max(Number(config.temperature_high) * 1.4, 1)),
-          meterClass: tempHigh ? 'bad' : 'ok',
+          rule: `当前最高 ${fmtNumber(maxTemp)} ℃ / 恢复 ${fmtNumber(tempRecoverValue)} ℃ / 上限 ${fmtNumber(tempHighValue)} ℃ / PWM ${Number(actuators.fan_pwm_percent ?? 0)}%`,
+          meterHtml: noNode ? '' : thresholdMeter({
+            current: maxTemp,
+            min: tempMin,
+            max: tempMax,
+            safeStart: tempMin,
+            safeEnd: tempHighValue,
+            markerStart: tempRecoverValue,
+            markerEnd: tempHighValue,
+            labels: [`当前 ${fmtNumber(maxTemp)} ℃`, `恢复 ${fmtNumber(tempRecoverValue)} ℃`, `上限 ${fmtNumber(tempHighValue)} ℃`],
+            currentClass: tempHigh ? 'bad' : 'ok',
+          }),
         },
         {
           key: 'pump',
@@ -701,9 +838,16 @@
             isAuto && actuators.pump ? '湿度低于下限，正在喷水' :
             isAuto && humidityLow ? '湿度仍低，等待冷却或下一次触发' :
             isAuto ? '湿度处于安全区间' : '由手动控制状态显示',
-          rule: `当前最低 ${fmtNumber(minHumidity)} % / 下限 ${fmtNumber(config.humidity_low)} % / 时长 ${config.pump_duration_sec ?? '-'} 秒`,
-          meter: clampPercent(minHumidity, 0, 100),
-          meterClass: humidityLow ? 'bad' : 'ok',
+          rule: `当前最低 ${fmtNumber(minHumidity)} % / 下限 ${fmtNumber(humidityLowValue)} % / 时长 ${config.pump_duration_sec ?? '-'} 秒`,
+          meterHtml: noNode ? '' : thresholdMeter({
+            current: minHumidity,
+            min: 0,
+            max: 100,
+            safeStart: humidityLowValue,
+            safeEnd: 100,
+            labels: [`当前 ${fmtNumber(minHumidity)}%`, `下限 ${fmtNumber(humidityLowValue)}%`, '100%'],
+            currentClass: humidityLow ? 'bad' : 'ok',
+          }),
         },
       ];
 
@@ -715,7 +859,7 @@
           </div>
           <div class="actuator-reason">${card.reason}</div>
           <div class="actuator-rule">${card.rule}</div>
-          <div class="meter ${card.meterClass}" style="--level:${card.meter}%"><span></span></div>
+          ${card.meterHtml}
         </div>
       `).join('');
     }
@@ -736,7 +880,7 @@
       latestStatus = data;
       const gatewayOnline = data.gateway === 'online';
       setConnection(gatewayOnline, gatewayOnline ? '网关在线' : '网关离线');
-      byId('runningValue').textContent = fmtBool(data.running);
+      byId('runningValue').textContent = fmtRunning(data.running);
       byId('modeValue').textContent = data.mode || '-';
       byId('gatewayValue').textContent = data.gateway || '-';
       byId('onlineValue').textContent = String(Object.values(data.nodes || {}).filter((n) => n.online).length);
@@ -750,7 +894,7 @@
       setInputIfIdle('pump_duration_sec', config.pump_duration_sec ?? '');
       setInputIfIdle('pump_cooldown_sec', config.pump_cooldown_sec ?? '');
 
-      updateModeButtons(data.mode || 'manual');
+      updateModeButtons(data.mode || 'safe');
       syncFanPwmControls(data);
       renderNodes(data.nodes || {}, config);
       renderActuators(data);
@@ -843,6 +987,10 @@
         renderStatus(data);
       } catch (err) {
         setConnection(false, '后端离线');
+        byId('runningValue').textContent = '未知';
+        byId('modeValue').textContent = '-';
+        byId('gatewayValue').textContent = 'offline';
+        byId('onlineValue').textContent = '-';
       }
     }
 

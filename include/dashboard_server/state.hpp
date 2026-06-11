@@ -21,6 +21,7 @@ namespace dashboard {
 constexpr int kUdpPort = 9000;
 constexpr int kHttpPort = 8080;
 constexpr int kGatewayControlPort = 9001;
+constexpr const char* kDefaultGatewaySshTarget = "debian@192.168.7.2";
 constexpr int kAutoFanPwmPercent = 50;
 constexpr std::chrono::seconds kNodeOfflineTimeout{5};
 constexpr std::chrono::seconds kGatewayOfflineTimeout{5};

@@ -2,6 +2,7 @@
 set -e
 
 rsync -avh \
+  -e 'ssh -F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/beagle_known_hosts' \
   --exclude 'build/' \
   --exclude 'CMakeFiles/' \
   --exclude 'CMakeCache.txt' \

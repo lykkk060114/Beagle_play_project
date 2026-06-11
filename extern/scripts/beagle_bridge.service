@@ -1,15 +1,14 @@
 [Unit]
-Description=BeaglePlay Freedom bridge
+Description=BeaglePlay integrated gateway
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=debian
-Group=debian
 RemainAfterExit=yes
 ExecStart=/home/debian/extern/scripts/beagle_bridge.sh start
 ExecStop=/home/debian/extern/scripts/beagle_bridge.sh stop
+ExecReload=/home/debian/extern/scripts/beagle_bridge.sh restart
 
 [Install]
 WantedBy=multi-user.target
