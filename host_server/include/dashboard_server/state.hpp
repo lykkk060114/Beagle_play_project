@@ -56,7 +56,6 @@ struct ActuatorState {
  */
 struct ConfigState {
     double light_low{30.0};
-    double light_high{45.0};
     double humidity_low{45.0};
     double temperature_high{32.0};
     int pump_duration_sec{3};

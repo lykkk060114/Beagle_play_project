@@ -371,7 +371,6 @@ std::string DashboardServer::buildStatusJsonLocked() {
 
         oss << "\"config\":{";
         oss << "\"light_low\":" << jsonNumber(state_.config.light_low) << ",";
-        oss << "\"light_high\":" << jsonNumber(state_.config.light_high) << ",";
         oss << "\"humidity_low\":" << jsonNumber(state_.config.humidity_low) << ",";
         oss << "\"temperature_high\":" << jsonNumber(state_.config.temperature_high) << ",";
         oss << "\"pump_duration_sec\":" << state_.config.pump_duration_sec << ",";
@@ -480,7 +479,6 @@ HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
 
             ConfigState next = {};
             if (!parseDoubleToken(body["light_low"], next.light_low) ||
-                !parseDoubleToken(body["light_high"], next.light_high) ||
                 !parseDoubleToken(body["humidity_low"], next.humidity_low) ||
                 !parseDoubleToken(body["temperature_high"], next.temperature_high) ||
                 !parseIntToken(body["pump_duration_sec"], next.pump_duration_sec) ||
