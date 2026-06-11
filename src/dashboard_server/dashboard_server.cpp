@@ -162,6 +162,24 @@ void DashboardServer::refreshGatewayOnlineLocked() {
         }
     }
 
+void DashboardServer::refreshNodeControlsLocked() {
+        state_.node_controls.clear();
+
+        for (const auto& [name, node] : state_.nodes) {
+            NodeControlState control;
+            control.online = node.online;
+
+            if (node.online) {
+                control.light_on = node.light < state_.config.light_low;
+                control.pump_on = node.humidity < state_.config.humidity_low;
+                control.fan_on = node.temperature > state_.config.temperature_high;
+                control.fan_pwm_percent = control.fan_on ? kAutoFanPwmPercent : 0;
+            }
+
+            state_.node_controls[name] = control;
+        }
+    }
+
 void DashboardServer::triggerPumpOnceLocked(const std::string& event_text) {
         state_.actuators.pump = true;
         appendEventLocked("ok", event_text);
@@ -176,46 +194,43 @@ void DashboardServer::triggerPumpOnceLocked(const std::string& event_text) {
     }
 
 bool DashboardServer::applyAutomaticControlLocked() {
+        refreshNodeControlsLocked();
+
         if (!state_.running || state_.mode != "auto") {
             return false;
         }
 
         bool changed = false;
         bool has_online_node = false;
-        bool any_light_below = false;
+        bool any_light_on = false;
         bool all_light_above = true;
-        bool any_humidity_low = false;
-        bool any_temp_high = false;
-        bool all_temp_cool = true;
+        bool any_pump_on = false;
+        bool any_fan_on = false;
 
-        for (auto& [name, node] : state_.nodes) {
+        for (const auto& [name, node] : state_.nodes) {
             if (!node.online) {
                 continue;
             }
             has_online_node = true;
-
-            if (node.light < state_.config.light_low) {
-                any_light_below = true;
-            }
-            if (!(node.light > state_.config.light_high)) {
+            const NodeControlState& control = state_.node_controls[name];
+            any_light_on = any_light_on || control.light_on;
+            any_pump_on = any_pump_on || control.pump_on;
+            any_fan_on = any_fan_on || control.fan_on;
+            if (!(node.light >= state_.config.light_low)) {
                 all_light_above = false;
-            }
-            if (node.humidity < state_.config.humidity_low) {
-                any_humidity_low = true;
-            }
-            if (node.temperature > state_.config.temperature_high) {
-                any_temp_high = true;
-            }
-            if (!(node.temperature <= state_.config.temperature_high - 2.0)) {
-                all_temp_cool = false;
             }
         }
 
         if (!has_online_node) {
-            return false;
+            if (state_.actuators.fan) {
+                setFanLocked(false);
+                appendEventLocked("ok", "Auto fan turned off");
+                changed = true;
+            }
+            return changed;
         }
 
-        if (any_light_below && !state_.actuators.light) {
+        if (any_light_on && !state_.actuators.light) {
             state_.actuators.light = true;
             appendEventLocked("ok", "Auto light turned on");
             changed = true;
@@ -225,11 +240,11 @@ bool DashboardServer::applyAutomaticControlLocked() {
             changed = true;
         }
 
-        if (any_temp_high && !state_.actuators.fan) {
+        if (any_fan_on && !state_.actuators.fan) {
             setFanLocked(true);
             appendEventLocked("ok", "Auto fan turned on");
             changed = true;
-        } else if (all_temp_cool && state_.actuators.fan) {
+        } else if (!any_fan_on && state_.actuators.fan) {
             setFanLocked(false);
             appendEventLocked("ok", "Auto fan turned off");
             changed = true;
@@ -246,7 +261,7 @@ bool DashboardServer::applyAutomaticControlLocked() {
             static_cast<long long>(std::max(0, state_.config.pump_cooldown_sec)) * 1000LL;
         const bool pump_ready = last_auto_pump_ms_ == 0 ||
                                 (now - last_auto_pump_ms_) >= cooldown_ms;
-        if (any_humidity_low && !state_.actuators.pump && pump_ready) {
+        if (any_pump_on && !state_.actuators.pump && pump_ready) {
             last_auto_pump_ms_ = now;
             triggerPumpOnceLocked("Auto pump triggered once");
             changed = true;
@@ -276,7 +291,8 @@ std::string DashboardServer::buildControlJsonLocked() {
         oss << "\"pwm\":" << state_.actuators.fan_pwm_percent << ",";
         oss << "\"fan_on\":" << jsonBool(state_.actuators.fan) << ",";
         oss << "\"fan_pwm\":" << state_.actuators.fan_pwm_percent << ",";
-        oss << "\"fan_auto\":" << jsonBool(state_.running && state_.mode == "auto");
+        oss << "\"fan_auto\":" << jsonBool(state_.running && state_.mode == "auto") << ",";
+        oss << "\"temperature_high\":" << jsonNumber(state_.config.temperature_high);
         oss << "}";
         return oss.str();
     }
@@ -323,6 +339,23 @@ std::string DashboardServer::buildStatusJsonLocked() {
             oss << "\"light\":" << jsonNumber(node.light) << ",";
             oss << "\"rssi\":" << node.rssi << ",";
             oss << "\"last_seen_ms\":" << jsonNumber(node.last_seen_ms);
+            oss << "}";
+        }
+        oss << "},";
+
+        oss << "\"node_controls\":{";
+        bool first_control = true;
+        for (const auto& [name, control] : state_.node_controls) {
+            if (!first_control) {
+                oss << ",";
+            }
+            first_control = false;
+            oss << "\"" << jsonEscape(name) << "\":{";
+            oss << "\"online\":" << jsonBool(control.online) << ",";
+            oss << "\"light_on\":" << jsonBool(control.light_on) << ",";
+            oss << "\"pump_on\":" << jsonBool(control.pump_on) << ",";
+            oss << "\"fan_on\":" << jsonBool(control.fan_on) << ",";
+            oss << "\"fan_pwm_percent\":" << control.fan_pwm_percent;
             oss << "}";
         }
         oss << "},";

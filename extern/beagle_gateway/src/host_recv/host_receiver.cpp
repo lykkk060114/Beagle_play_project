@@ -129,6 +129,12 @@ std::optional<HostCommand> HostReceiver::receive() {
         }
     }
 
+    const auto temp_high_it = fields.find("temperature_high");
+    if (temp_high_it != fields.end() &&
+        parse_double_token(temp_high_it->second, command.temperature_high)) {
+        command.has_temperature_high = true;
+    }
+
     const auto voice_it = fields.find("voice_enable");
     if (voice_it != fields.end() && parse_bool_token(voice_it->second, command.voice_enable)) {
         command.has_voice_enable = true;

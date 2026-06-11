@@ -25,6 +25,7 @@ public:
 
 private:
     int last_policy_pwm_;
+    double temperature_high_;
     bool manual_fan_control_;
     std::chrono::seconds offline_timeout_;
 

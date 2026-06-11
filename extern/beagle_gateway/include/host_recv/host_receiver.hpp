@@ -12,6 +12,8 @@ struct HostCommand {
     bool fan_on = false;
     bool has_fan_pwm = false;
     int fan_pwm = 60;
+    bool has_temperature_high = false;
+    double temperature_high = 32.0;
     bool has_voice_enable = false;
     bool voice_enable = true;
     std::string payload;

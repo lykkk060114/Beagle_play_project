@@ -73,6 +73,7 @@ private:
     void setManualFanPwmLocked(int percent);
     void refreshNodeOnlineLocked();
     void refreshGatewayOnlineLocked();
+    void refreshNodeControlsLocked();
     bool applyAutomaticControlLocked();
     void triggerPumpOnceLocked(const std::string& event_text);
     void rememberGatewayAddressLocked(const sockaddr_in& sender);

@@ -84,13 +84,6 @@
       margin-bottom: 14px;
     }
 
-    .grid-3 {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
-      margin-bottom: 14px;
-    }
-
     .section {
       background: rgba(17, 26, 36, 0.95);
       border: 1px solid var(--line);
@@ -221,6 +214,15 @@
     .actuator-card.on::before { background: var(--ok); }
     .actuator-card.warn::before { background: var(--warn); }
     .actuator-card.off::before { background: #304155; }
+    .actuator-card.need {
+      border-color: rgba(255, 107, 107, 0.45);
+      background: rgba(255, 107, 107, 0.06);
+    }
+    .actuator-card.need::before { background: var(--bad); }
+    .actuator-card.clear {
+      border-color: rgba(57, 217, 138, 0.35);
+    }
+    .actuator-card.clear::before { background: var(--ok); }
 
     .actuator-top {
       display: flex;
@@ -255,6 +257,11 @@
       color: var(--muted);
       background: rgba(255, 255, 255, 0.03);
     }
+    .actuator-state.need {
+      color: var(--bad);
+      border-color: rgba(255, 107, 107, 0.35);
+      background: rgba(255, 107, 107, 0.12);
+    }
 
     .actuator-reason {
       min-height: 38px;
@@ -262,6 +269,50 @@
       font-size: 14px;
       line-height: 1.35;
     }
+
+    .judge-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .judge-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .judge-row.ok {
+      border-color: rgba(57, 217, 138, 0.3);
+      background: rgba(57, 217, 138, 0.08);
+    }
+
+    .judge-row.bad {
+      border-color: rgba(255, 107, 107, 0.34);
+      background: rgba(255, 107, 107, 0.08);
+    }
+
+    .judge-name {
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+
+    .judge-detail {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .judge-action {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .judge-row.ok .judge-action { color: var(--ok); }
+    .judge-row.bad .judge-action { color: var(--bad); }
 
     .actuator-rule {
       margin-top: 12px;
@@ -366,6 +417,23 @@
       gap: 10px;
     }
 
+    .threshold-form {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .threshold-save {
+      display: flex;
+      align-items: end;
+    }
+
+    .threshold-save button {
+      width: 100%;
+      min-width: 96px;
+    }
+
     .field label {
       display: block;
       margin-bottom: 6px;
@@ -468,12 +536,14 @@
     }
 
     @media (max-width: 1100px) {
-      .grid-4, .grid-3, .form-grid, .actuator-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-4, .form-grid, .actuator-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .threshold-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-width: 720px) {
       header { flex-direction: column; align-items: flex-start; }
-      .grid-4, .grid-3, .form-grid, .actuator-grid { grid-template-columns: 1fr; }
+      .grid-4, .form-grid, .actuator-grid { grid-template-columns: 1fr; }
+      .threshold-form { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -519,36 +589,8 @@
       <div class="foot">最后更新时间：<span id="updatedAt">-</span></div>
     </section>
 
-    <section class="section" style="margin-top:14px;">
-      <h2>Freedom 节点实时数据</h2>
-      <div id="nodeCards" class="cards"></div>
-    </section>
-
-    <section class="section" style="margin-top:14px;">
-      <div class="section-head">
-        <h2>自动执行器</h2>
-        <span id="autoSummary" class="badge warn">等待状态</span>
-      </div>
-      <div id="actuatorCards" class="actuator-grid"></div>
-    </section>
-
-    <section class="grid-3" style="margin-top:14px;">
-      <div class="section">
-        <h2>阈值设置</h2>
-        <div class="form-grid">
-          <div class="field"><label>光照下限</label><input id="light_low" type="number" step="0.1"></div>
-          <div class="field"><label>光照恢复值</label><input id="light_high" type="number" step="0.1"></div>
-          <div class="field"><label>湿度下限</label><input id="humidity_low" type="number" step="0.1"></div>
-          <div class="field"><label>温度上限</label><input id="temperature_high" type="number" step="0.1"></div>
-          <div class="field"><label>喷水时长(秒)</label><input id="pump_duration_sec" type="number" step="1" min="0"></div>
-          <div class="field"><label>喷水冷却(秒)</label><input id="pump_cooldown_sec" type="number" step="1" min="0"></div>
-        </div>
-        <div class="btn-row" style="margin-top:12px;">
-          <button class="primary" onclick="saveConfig()">保存阈值</button>
-        </div>
-      </div>
-
-      <div class="section">
+    <div id="runningContent" class="hidden">
+      <section class="section" style="margin-top:14px;">
         <h2>模式切换</h2>
         <div class="btn-row">
           <button id="mode_auto" class="primary" onclick="setMode('auto')">自动模式</button>
@@ -556,9 +598,34 @@
           <button id="mode_safe" class="warn" onclick="setMode('safe')">安全模式</button>
         </div>
         <div class="foot">safe 模式下后端会关闭全部执行器并拒绝控制请求。</div>
-      </div>
+      </section>
 
-      <div id="manualControl" class="section">
+      <section class="section" style="margin-top:14px;">
+        <h2>Freedom 节点实时数据</h2>
+        <div id="nodeCards" class="cards"></div>
+      </section>
+
+      <section id="thresholdControl" class="section" style="margin-top:14px;">
+        <h2>阈值设置</h2>
+        <div class="threshold-form">
+          <div class="field"><label>光照下限</label><input id="light_low" type="number" step="0.1"></div>
+          <div class="field"><label>湿度下限</label><input id="humidity_low" type="number" step="0.1"></div>
+          <div class="field"><label>温度上限</label><input id="temperature_high" type="number" step="0.1"></div>
+          <div class="field"><label>喷水时长(秒)</label><input id="pump_duration_sec" type="number" step="1" min="0"></div>
+          <div class="field"><label>喷水冷却(秒)</label><input id="pump_cooldown_sec" type="number" step="1" min="0"></div>
+          <div class="threshold-save"><button class="primary" onclick="saveConfig()">保存阈值</button></div>
+        </div>
+      </section>
+
+      <section id="autoControl" class="section hidden" style="margin-top:14px;">
+        <div class="section-head">
+          <h2>F1 / F2 自动控制判断</h2>
+          <span id="autoSummary" class="badge warn">等待状态</span>
+        </div>
+        <div id="actuatorCards" class="actuator-grid"></div>
+      </section>
+
+      <div id="manualControl" class="section hidden" style="margin-top:14px;">
         <h2>手动控制</h2>
         <div id="manualControlPlaceholder" class="manual-placeholder">切换到手动模式后显示灯、水泵、风扇控制。</div>
         <div id="manualControlBody" class="hidden">
@@ -582,12 +649,12 @@
         </div>
         <div class="foot">手动模式下才允许直接控制执行器。</div>
       </div>
-    </section>
 
-    <section class="section" style="margin-top:14px;">
-      <h2>事件日志</h2>
-      <div id="events" class="events"></div>
-    </section>
+      <section class="section" style="margin-top:14px;">
+        <h2>事件日志</h2>
+        <div id="events" class="events"></div>
+      </section>
+    </div>
   </div>
 
   <script>
@@ -669,17 +736,19 @@
       }
       const activeId = mode === 'auto' ? 'mode_auto' : mode === 'manual' ? 'mode_manual' : 'mode_safe';
       byId(activeId).classList.add('active');
+      byId('thresholdControl').classList.toggle('hidden', mode !== 'auto');
+      byId('autoControl').classList.toggle('hidden', mode !== 'auto');
+      byId('manualControl').classList.toggle('hidden', mode !== 'manual');
       byId('manualControlBody').classList.toggle('hidden', mode !== 'manual');
       byId('manualControlPlaceholder').classList.toggle('hidden', mode === 'manual');
       byId('fanPwmRange').disabled = mode !== 'manual';
     }
 
     function valueClass(kind, node, config) {
-      if (kind === 'temperature' && Number(node.temperature) > Number(config.temperature_high)) return 'bad';
-      if (kind === 'humidity' && Number(node.humidity) < Number(config.humidity_low)) return 'bad';
-      if (kind === 'light' && Number(node.light) < Number(config.light_low)) return 'warn';
-      if (kind === 'light' && Number(node.light) > Number(config.light_high)) return 'good';
-      return '';
+      if (kind === 'temperature') return Number(node.temperature) <= Number(config.temperature_high) ? 'good' : 'bad';
+      if (kind === 'humidity') return Number(node.humidity) >= Number(config.humidity_low) ? 'good' : 'bad';
+      if (kind === 'light') return Number(node.light) >= Number(config.light_low) ? 'good' : 'bad';
+      return 'bad';
     }
 
     function renderNodes(nodes, config) {
@@ -759,109 +828,66 @@
       const summary = byId('autoSummary');
       const actuators = data.actuators || {};
       const config = data.config || {};
-      const online = onlineNodes(data);
-      const nodes = online;
+      const nodes = data.nodes || {};
+      const controls = data.node_controls || {};
       const isAuto = data.running && data.mode === 'auto';
-      const noNode = nodes.length === 0;
+      const keys = Array.from(new Set([
+        ...Object.keys(nodes),
+        ...Object.keys(controls),
+      ])).sort();
 
       summary.className = 'badge ' + (isAuto ? 'ok' : data.mode === 'safe' ? 'bad' : 'warn');
-      summary.textContent = data.running ? (isAuto ? '自动模式运行中' : '系统运行中') : '系统已停止';
+      summary.textContent = `实际输出 灯${fmtBool(actuators.light)} / 水泵${fmtBool(actuators.pump)} / 风扇${fmtBool(actuators.fan)}`;
 
-      const lightLow = anyNode(nodes, (node) => Number(node.light) < Number(config.light_low));
-      const lightRecovered = allNode(nodes, (node) => Number(node.light) > Number(config.light_high));
-      const tempHigh = anyNode(nodes, (node) => Number(node.temperature) > Number(config.temperature_high));
-      const tempRecovered = allNode(nodes, (node) => Number(node.temperature) <= Number(config.temperature_high) - 2);
-      const humidityLow = anyNode(nodes, (node) => Number(node.humidity) < Number(config.humidity_low));
+      if (!keys.length) {
+        host.innerHTML = '<div class="actuator-card off"><div class="actuator-name">暂无节点判断</div><div class="actuator-rule">等待 F1/F2 数据。</div></div>';
+        return;
+      }
 
-      const minLight = noNode ? null : nodes.reduce((min, node) => Math.min(min, Number(node.light)), Number.POSITIVE_INFINITY);
-      const maxTemp = noNode ? null : nodes.reduce((max, node) => Math.max(max, Number(node.temperature)), Number.NEGATIVE_INFINITY);
-      const minHumidity = noNode ? null : nodes.reduce((min, node) => Math.min(min, Number(node.humidity)), Number.POSITIVE_INFINITY);
-      const lightLowValue = finiteOr(config.light_low, 0);
-      const lightHighValue = finiteOr(config.light_high, Math.max(lightLowValue + 1, 1));
-      const tempHighValue = finiteOr(config.temperature_high, 30);
-      const tempRecoverValue = tempHighValue - 2;
-      const humidityLowValue = finiteOr(config.humidity_low, 0);
-      const lightMax = Math.max(lightHighValue * 1.4, lightHighValue + 1, 1);
-      const tempMin = Math.min(0, tempRecoverValue - 5);
-      const tempMax = Math.max(tempHighValue + 5, 40);
+      host.innerHTML = keys.map((key) => {
+        const node = nodes[key] || {};
+        const control = controls[key] || {};
+        const online = !!(node.online || control.online);
+        const lightOn = online && !!control.light_on;
+        const pumpOn = online && !!control.pump_on;
+        const fanOn = online && !!control.fan_on;
+        const active = lightOn || pumpOn || fanOn;
+        const stateText = online ? (active ? '需要处理' : '全部达标') : '离线';
 
-      const cards = [
-        {
-          key: 'light',
-          name: '补光灯',
-          active: !!actuators.light,
-          hot: isAuto && lightLow,
-          reason: noNode ? '等待在线节点' :
-            isAuto && lightLow ? '光照低于下限，补光灯开启' :
-            isAuto && lightRecovered ? '光照已高于恢复值' :
-            isAuto ? '光照处于阈值区间' : '由手动控制状态显示',
-          rule: `当前最低 ${fmtNumber(minLight)} / 下限 ${fmtNumber(lightLowValue)} / 恢复 ${fmtNumber(lightHighValue)}`,
-          meterHtml: noNode ? '' : thresholdMeter({
-            current: minLight,
-            min: 0,
-            max: lightMax,
-            safeStart: lightLowValue,
-            safeEnd: lightHighValue,
-            labels: [`当前 ${fmtNumber(minLight)}`, `下限 ${fmtNumber(lightLowValue)}`, `恢复 ${fmtNumber(lightHighValue)}`],
-            currentClass: lightLow ? 'warn' : 'ok',
-          }),
-        },
-        {
-          key: 'fan',
-          name: '风扇',
-          active: !!actuators.fan,
-          valueText: actuators.fan ? `ON ${Number(actuators.fan_pwm_percent ?? 0)}%` : 'OFF',
-          hot: isAuto && tempHigh,
-          reason: noNode ? '等待在线节点' :
-            isAuto && tempHigh ? '温度高于上限，风扇开启' :
-            isAuto && tempRecovered ? '温度已回落到恢复区间' :
-            isAuto ? '温度接近控制区间' : '由手动控制状态显示',
-          rule: `当前最高 ${fmtNumber(maxTemp)} ℃ / 恢复 ${fmtNumber(tempRecoverValue)} ℃ / 上限 ${fmtNumber(tempHighValue)} ℃ / PWM ${Number(actuators.fan_pwm_percent ?? 0)}%`,
-          meterHtml: noNode ? '' : thresholdMeter({
-            current: maxTemp,
-            min: tempMin,
-            max: tempMax,
-            safeStart: tempMin,
-            safeEnd: tempHighValue,
-            markerStart: tempRecoverValue,
-            markerEnd: tempHighValue,
-            labels: [`当前 ${fmtNumber(maxTemp)} ℃`, `恢复 ${fmtNumber(tempRecoverValue)} ℃`, `上限 ${fmtNumber(tempHighValue)} ℃`],
-            currentClass: tempHigh ? 'bad' : 'ok',
-          }),
-        },
-        {
-          key: 'pump',
-          name: '水泵',
-          active: !!actuators.pump,
-          hot: isAuto && humidityLow,
-          reason: noNode ? '等待在线节点' :
-            isAuto && actuators.pump ? '湿度低于下限，正在喷水' :
-            isAuto && humidityLow ? '湿度仍低，等待冷却或下一次触发' :
-            isAuto ? '湿度处于安全区间' : '由手动控制状态显示',
-          rule: `当前最低 ${fmtNumber(minHumidity)} % / 下限 ${fmtNumber(humidityLowValue)} % / 时长 ${config.pump_duration_sec ?? '-'} 秒`,
-          meterHtml: noNode ? '' : thresholdMeter({
-            current: minHumidity,
-            min: 0,
-            max: 100,
-            safeStart: humidityLowValue,
-            safeEnd: 100,
-            labels: [`当前 ${fmtNumber(minHumidity)}%`, `下限 ${fmtNumber(humidityLowValue)}%`, '100%'],
-            currentClass: humidityLow ? 'bad' : 'ok',
-          }),
-        },
-      ];
-
-      host.innerHTML = cards.map((card) => `
-        <div class="actuator-card ${card.active ? 'on' : 'off'} ${card.hot ? 'warn' : ''}">
+        return `
+        <div class="actuator-card ${!online ? 'off' : active ? 'need' : 'clear'}">
           <div class="actuator-top">
-            <div class="actuator-name">${card.name}</div>
-            <div class="actuator-state ${card.active ? 'on' : 'off'}">${card.valueText || (card.active ? 'ON' : 'OFF')}</div>
+            <div class="actuator-name">${key}</div>
+            <div class="actuator-state ${active ? 'need' : 'off'}">${stateText}</div>
           </div>
-          <div class="actuator-reason">${card.reason}</div>
-          <div class="actuator-rule">${card.rule}</div>
-          ${card.meterHtml}
-        </div>
-      `).join('');
+          <div class="judge-list">
+            <div class="judge-row ${lightOn ? 'bad' : 'ok'}">
+              <div>
+                <div class="judge-name">光照</div>
+                <div class="judge-detail">当前 ${fmtNumber(node.light)} / 下限 ${fmtNumber(config.light_low)}</div>
+              </div>
+              <div class="judge-action">${lightOn ? '开灯' : '正常'}</div>
+            </div>
+            <div class="judge-row ${pumpOn ? 'bad' : 'ok'}">
+              <div>
+                <div class="judge-name">湿度</div>
+                <div class="judge-detail">当前 ${fmtNumber(node.humidity)}% / 下限 ${fmtNumber(config.humidity_low)}%</div>
+              </div>
+              <div class="judge-action">${pumpOn ? '喷水' : '正常'}</div>
+            </div>
+            <div class="judge-row ${fanOn ? 'bad' : 'ok'}">
+              <div>
+                <div class="judge-name">温度</div>
+                <div class="judge-detail">当前 ${fmtNumber(node.temperature)} ℃ / 上限 ${fmtNumber(config.temperature_high)} ℃</div>
+              </div>
+              <div class="judge-action">${fanOn ? '开风扇' : '正常'}</div>
+            </div>
+          </div>
+          <div class="actuator-rule">
+            实际输出：灯 ${fmtBool(actuators.light)} / 水泵 ${fmtBool(actuators.pump)} / 风扇 ${fmtBool(actuators.fan)}
+          </div>
+        </div>`;
+      }).join('');
     }
 
     function renderEvents(events) {
@@ -878,6 +904,7 @@
 
     function renderStatus(data) {
       latestStatus = data;
+      const running = data.running === true;
       const gatewayOnline = data.gateway === 'online';
       setConnection(gatewayOnline, gatewayOnline ? '网关在线' : '网关离线');
       byId('runningValue').textContent = fmtRunning(data.running);
@@ -885,16 +912,16 @@
       byId('gatewayValue').textContent = data.gateway || '-';
       byId('onlineValue').textContent = String(Object.values(data.nodes || {}).filter((n) => n.online).length);
       byId('updatedAt').textContent = fmtTime(data.last_update_ms);
+      byId('runningContent').classList.toggle('hidden', !running);
 
       const config = data.config || {};
       setInputIfIdle('light_low', config.light_low ?? '');
-      setInputIfIdle('light_high', config.light_high ?? '');
       setInputIfIdle('humidity_low', config.humidity_low ?? '');
       setInputIfIdle('temperature_high', config.temperature_high ?? '');
       setInputIfIdle('pump_duration_sec', config.pump_duration_sec ?? '');
       setInputIfIdle('pump_cooldown_sec', config.pump_cooldown_sec ?? '');
 
-      updateModeButtons(data.mode || 'safe');
+      updateModeButtons(running ? (data.mode || 'safe') : 'safe');
       syncFanPwmControls(data);
       renderNodes(data.nodes || {}, config);
       renderActuators(data);
@@ -936,9 +963,10 @@
 
     async function saveConfig() {
       try {
+        const lightLow = Number(byId('light_low').value);
         const payload = {
-          light_low: Number(byId('light_low').value),
-          light_high: Number(byId('light_high').value),
+          light_low: lightLow,
+          light_high: lightLow,
           humidity_low: Number(byId('humidity_low').value),
           temperature_high: Number(byId('temperature_high').value),
           pump_duration_sec: Number(byId('pump_duration_sec').value),
@@ -991,6 +1019,7 @@
         byId('modeValue').textContent = '-';
         byId('gatewayValue').textContent = 'offline';
         byId('onlineValue').textContent = '-';
+        byId('runningContent').classList.add('hidden');
       }
     }
 

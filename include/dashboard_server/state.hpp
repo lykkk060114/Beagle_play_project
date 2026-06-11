@@ -76,6 +76,18 @@ struct NodeState {
     long long last_seen_ms{0};
 };
 
+/***
+ * @description: 每个 Freedom 节点对应的自动控制判断
+ * @return {*}
+ */
+struct NodeControlState {
+    bool online{false};
+    bool light_on{false};
+    bool pump_on{false};
+    bool fan_on{false};
+    int fan_pwm_percent{0};
+};
+
 /*** 
  * @description: 系统状态结构体
  * @return {*}
@@ -87,6 +99,7 @@ struct SystemState {
     long long last_gateway_seen_ms{0};
     long long last_update_ms{0};
     std::map<std::string, NodeState> nodes{};
+    std::map<std::string, NodeControlState> node_controls{};
     ActuatorState actuators{};
     ConfigState config{};
     std::deque<EventEntry> events{};
