@@ -318,6 +318,10 @@
       display: none !important;
     }
 
+    [v-cloak] {
+      display: none;
+    }
+
     .form-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -455,13 +459,16 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div id="app" class="wrap" v-cloak>
     <header>
       <div>
         <h1>智能农业网页控制台</h1>
         <div class="subtitle">BeaglePlay UDP 网关 + 主机端后端 + 浏览器监控面板</div>
       </div>
-      <div class="status-pill"><span id="connDot" class="dot"></span><span id="connText">等待状态</span></div>
+      <div class="status-pill">
+        <span :class="['dot', connectionClass]"></span>
+        <span>{{ connectionText }}</span>
+      </div>
     </header>
 
     <section class="section">
@@ -469,413 +476,415 @@
       <div class="grid-4">
         <div class="metric">
           <div class="label">系统运行</div>
-          <div id="runningValue" class="value">-</div>
+          <div class="value">{{ runningValue }}</div>
           <div class="hint">running</div>
         </div>
         <div class="metric">
           <div class="label">当前模式</div>
-          <div id="modeValue" class="value">-</div>
+          <div class="value">{{ modeValue }}</div>
           <div class="hint">auto / manual / safe</div>
         </div>
         <div class="metric">
           <div class="label">在线节点</div>
-          <div id="onlineValue" class="value">-</div>
+          <div class="value">{{ onlineValue }}</div>
           <div class="hint">nodes online</div>
         </div>
         <div class="metric">
           <div class="label">网关状态</div>
-          <div id="gatewayValue" class="value">-</div>
+          <div class="value">{{ gatewayValue }}</div>
           <div class="hint">gateway</div>
         </div>
       </div>
       <div class="btn-row">
-        <button class="ok" onclick="postNoBody('/api/system/start')">启动系统</button>
-        <button class="bad" onclick="postNoBody('/api/system/stop')">停止系统</button>
-        <button class="primary" onclick="postNoBody('/api/system/restart_gateway')">请求重启网关</button>
+        <button class="ok" @click="postNoBody('/api/system/start')">启动系统</button>
+        <button class="bad" @click="postNoBody('/api/system/stop')">停止系统</button>
+        <button class="primary" @click="postNoBody('/api/system/restart_gateway')">请求重启网关</button>
       </div>
-      <div class="foot">最后更新时间：<span id="updatedAt">-</span></div>
+      <div class="foot">最后更新时间：{{ updatedAt }}</div>
     </section>
 
-    <div id="runningContent" class="hidden">
+    <div v-show="running">
       <section class="section" style="margin-top:14px;">
         <h2>模式切换</h2>
         <div class="btn-row">
-          <button id="mode_auto" class="primary" onclick="setMode('auto')">自动模式</button>
-          <button id="mode_manual" class="primary" onclick="setMode('manual')">手动模式</button>
-          <button id="mode_safe" class="warn" onclick="setMode('safe')">安全模式</button>
+          <button class="primary" :class="{ active: mode === 'auto' }" @click="setMode('auto')">自动模式</button>
+          <button class="primary" :class="{ active: mode === 'manual' }" @click="setMode('manual')">手动模式</button>
+          <button class="warn" :class="{ active: mode === 'safe' }" @click="setMode('safe')">安全模式</button>
         </div>
         <div class="foot">safe 模式下后端会关闭全部执行器并拒绝控制请求。</div>
       </section>
 
       <section class="section" style="margin-top:14px;">
         <h2>Freedom 节点实时数据</h2>
-        <div id="nodeCards" class="cards"></div>
+        <div v-if="nodeCards.length === 0" class="node-card">
+          <div class="node-id">暂无节点数据</div>
+          <div class="foot">等待 BeaglePlay 发送 UDP JSON。</div>
+        </div>
+        <div v-else class="cards">
+          <div v-for="node in nodeCards" :key="node.key" class="node-card">
+            <div class="node-head">
+              <div class="node-id">{{ node.key }}</div>
+              <span :class="['badge', node.online ? 'ok' : 'bad']">{{ node.online ? 'ONLINE' : 'OFFLINE' }}</span>
+            </div>
+            <div class="node-grid">
+              <div :class="['kv', valueClass('temperature', node)]">
+                <div class="k">温度</div>
+                <div class="v">{{ fmtNumber(node.temperature) }} ℃</div>
+              </div>
+              <div :class="['kv', valueClass('humidity', node)]">
+                <div class="k">湿度</div>
+                <div class="v">{{ fmtNumber(node.humidity) }} %</div>
+              </div>
+              <div :class="['kv', valueClass('light', node)]">
+                <div class="k">光照</div>
+                <div class="v">{{ fmtNumber(node.light) }}</div>
+              </div>
+              <div class="kv">
+                <div class="k">RSSI</div>
+                <div class="v">{{ fmtNumber(node.rssi, 0) }} dBm</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section id="thresholdControl" class="section" style="margin-top:14px;">
+      <section v-show="mode === 'auto'" class="section" style="margin-top:14px;">
         <h2>阈值设置</h2>
         <div class="threshold-form">
-          <div class="field"><label>光照下限</label><input id="light_low" type="number" step="0.1"></div>
-          <div class="field"><label>湿度下限</label><input id="humidity_low" type="number" step="0.1"></div>
-          <div class="field"><label>温度上限</label><input id="temperature_high" type="number" step="0.1"></div>
-          <div class="field"><label>喷水时长(秒)</label><input id="pump_duration_sec" type="number" step="1" min="0"></div>
-          <div class="field"><label>喷水冷却(秒)</label><input id="pump_cooldown_sec" type="number" step="1" min="0"></div>
-          <div class="threshold-save"><button class="primary" onclick="saveConfig()">保存阈值</button></div>
+          <div class="field">
+            <label>光照下限</label>
+            <input v-model.number="configForm.light_low" type="number" step="0.1" @focus="editingConfig = true">
+          </div>
+          <div class="field">
+            <label>湿度下限</label>
+            <input v-model.number="configForm.humidity_low" type="number" step="0.1" @focus="editingConfig = true">
+          </div>
+          <div class="field">
+            <label>温度上限</label>
+            <input v-model.number="configForm.temperature_high" type="number" step="0.1" @focus="editingConfig = true">
+          </div>
+          <div class="field">
+            <label>喷水时长(秒)</label>
+            <input v-model.number="configForm.pump_duration_sec" type="number" step="1" min="0" @focus="editingConfig = true">
+          </div>
+          <div class="field">
+            <label>喷水冷却(秒)</label>
+            <input v-model.number="configForm.pump_cooldown_sec" type="number" step="1" min="0" @focus="editingConfig = true">
+          </div>
+          <div class="threshold-save"><button class="primary" @click="saveConfig">保存阈值</button></div>
         </div>
       </section>
 
-      <section id="autoControl" class="section hidden" style="margin-top:14px;">
+      <section v-show="mode === 'auto'" class="section" style="margin-top:14px;">
         <div class="section-head">
           <h2>F1 / F2 自动控制判断</h2>
-          <span id="autoSummary" class="badge warn">等待状态</span>
+          <span :class="['badge', autoSummaryClass]">{{ autoSummaryText }}</span>
         </div>
-        <div id="actuatorCards" class="actuator-grid"></div>
+        <div v-if="controlCards.length === 0" class="actuator-card off">
+          <div class="actuator-name">暂无节点判断</div>
+          <div class="actuator-rule">等待 F1/F2 数据。</div>
+        </div>
+        <div v-else class="actuator-grid">
+          <div v-for="card in controlCards"
+               :key="card.key"
+               :class="['actuator-card', !card.online ? 'off' : card.active ? 'need' : 'clear']">
+            <div class="actuator-top">
+              <div class="actuator-name">{{ card.key }}</div>
+              <div :class="['actuator-state', card.active ? 'need' : 'off']">{{ card.stateText }}</div>
+            </div>
+            <div class="judge-list">
+              <div :class="['judge-row', card.lightOn ? 'bad' : 'ok']">
+                <div>
+                  <div class="judge-name">光照</div>
+                  <div class="judge-detail">当前 {{ fmtNumber(card.node.light) }} / 下限 {{ fmtNumber(config.light_low) }}</div>
+                </div>
+                <div class="judge-action">{{ card.lightOn ? '开灯' : '正常' }}</div>
+              </div>
+              <div :class="['judge-row', card.pumpOn ? 'bad' : 'ok']">
+                <div>
+                  <div class="judge-name">湿度</div>
+                  <div class="judge-detail">当前 {{ fmtNumber(card.node.humidity) }}% / 下限 {{ fmtNumber(config.humidity_low) }}%</div>
+                </div>
+                <div class="judge-action">{{ card.pumpOn ? '喷水' : '正常' }}</div>
+              </div>
+              <div :class="['judge-row', card.fanOn ? 'bad' : 'ok']">
+                <div>
+                  <div class="judge-name">温度</div>
+                  <div class="judge-detail">当前 {{ fmtNumber(card.node.temperature) }} ℃ / 上限 {{ fmtNumber(config.temperature_high) }} ℃</div>
+                </div>
+                <div class="judge-action">{{ card.fanOn ? '开风扇' : '正常' }}</div>
+              </div>
+            </div>
+            <div class="actuator-rule">
+              实际输出：灯 {{ fmtBool(actuators.light) }} / 水泵 {{ fmtBool(actuators.pump) }} / 风扇 {{ fmtBool(actuators.fan) }}
+            </div>
+          </div>
+        </div>
       </section>
 
-      <div id="manualControl" class="section hidden" style="margin-top:14px;">
+      <section v-show="mode === 'manual'" class="section" style="margin-top:14px;">
         <h2>手动控制</h2>
-        <div id="manualControlPlaceholder" class="manual-placeholder">切换到手动模式后显示灯、水泵、风扇控制。</div>
-        <div id="manualControlBody" class="hidden">
         <div class="btn-row">
-          <button onclick="controlDevice('light','on')">开灯</button>
-          <button onclick="controlDevice('light','off')">关灯</button>
-          <button class="ok" onclick="controlDevice('pump','once')">喷水一次</button>
-          <button class="bad" onclick="controlDevice('pump','off')">水泵急停</button>
-          <button onclick="controlDevice('fan','on')">开风扇</button>
-          <button onclick="controlDevice('fan','off')">关风扇</button>
+          <button @click="controlDevice('light','on')">开灯</button>
+          <button @click="controlDevice('light','off')">关灯</button>
+          <button class="ok" @click="controlDevice('pump','once')">喷水一次</button>
+          <button class="bad" @click="controlDevice('pump','off')">水泵急停</button>
+          <button @click="controlDevice('fan','on')">开风扇</button>
+          <button @click="controlDevice('fan','off')">关风扇</button>
         </div>
         <div class="fan-pwm-control">
           <div class="fan-pwm-head">
             <span>风扇 PWM</span>
-            <span id="fanPwmValue" class="fan-pwm-value">50%</span>
+            <span class="fan-pwm-value">{{ fanPwm }}%</span>
           </div>
-          <input id="fanPwmRange" type="range" min="0" max="100" step="1" value="50"
-                 oninput="updateFanPwmPreview()" onchange="setFanPwmFromSlider()">
-          <div id="fanPwmHint" class="foot">手动模式下可调；自动模式固定 50%。</div>
-        </div>
+          <input v-model.number="fanPwm"
+                 type="range"
+                 min="0"
+                 max="100"
+                 step="1"
+                 :disabled="mode !== 'manual'"
+                 @focus="editingFanPwm = true"
+                 @change="setFanPwmFromSlider">
+          <div class="foot">手动模式下可调，开风扇时按该 PWM 下发。</div>
         </div>
         <div class="foot">手动模式下才允许直接控制执行器。</div>
-      </div>
+      </section>
 
       <section class="section" style="margin-top:14px;">
         <h2>事件日志</h2>
-        <div id="events" class="events"></div>
+        <div class="events">
+          <div v-if="events.length === 0" class="event">暂无事件</div>
+          <div v-for="(event, index) in events" :key="index" :class="['event', eventClass(event)]">
+            <small>{{ event.level }}</small>{{ event.text }}
+          </div>
+        </div>
       </section>
     </div>
   </div>
 
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
   <script>
-    let latestStatus = null;
+    const { createApp } = Vue;
 
-    function byId(id) {
-      return document.getElementById(id);
-    }
-
-    function fmtBool(value) {
-      return value ? 'ON' : 'OFF';
-    }
-
-    function fmtRunning(value) {
-      return value === true ? '运行中' : '已停止';
-    }
-
-    function fmtTime(ms) {
-      if (!ms) return '-';
-      return new Date(ms).toLocaleString();
-    }
-
-    function fmtNumber(value, digits = 1) {
-      if (value === null || value === undefined) return '-';
-      const number = Number(value);
-      return Number.isFinite(number) ? number.toFixed(digits) : '-';
-    }
-
-    function setConnection(ok, text) {
-      byId('connText').textContent = text;
-      const dot = byId('connDot');
-      dot.className = 'dot' + (ok === true ? ' ok' : ok === false ? ' bad' : '');
-    }
-
-    function setInputIfIdle(id, value) {
-      const el = byId(id);
-      if (document.activeElement !== el) {
-        el.value = value;
-      }
-    }
-
-    function syncFanPwmControls(data) {
-      const actuators = data.actuators || {};
-      const mode = data.mode || 'manual';
-      const range = byId('fanPwmRange');
-      const manualPwm = Number(actuators.manual_fan_pwm_percent ?? 50);
-      const autoPwm = Number(actuators.auto_fan_pwm_percent ?? 50);
-
-      if (document.activeElement !== range) {
-        range.value = manualPwm;
-      }
-      range.disabled = mode !== 'manual';
-
-      byId('fanPwmValue').textContent = mode === 'auto' ? `固定 ${autoPwm}%` : `${range.value}%`;
-      byId('fanPwmHint').textContent =
-        mode === 'manual' ? '手动模式下可调，开风扇时按该 PWM 下发。' :
-        mode === 'auto' ? `自动模式固定 ${autoPwm}%。` :
-        '安全模式下不可调。';
-    }
-
-    function updateFanPwmPreview() {
-      byId('fanPwmValue').textContent = `${byId('fanPwmRange').value}%`;
-    }
-
-    function updateModeButtons(mode) {
-      for (const id of ['mode_auto', 'mode_manual', 'mode_safe']) {
-        byId(id).classList.remove('active');
-      }
-      const activeId = mode === 'auto' ? 'mode_auto' : mode === 'manual' ? 'mode_manual' : 'mode_safe';
-      byId(activeId).classList.add('active');
-      byId('thresholdControl').classList.toggle('hidden', mode !== 'auto');
-      byId('autoControl').classList.toggle('hidden', mode !== 'auto');
-      byId('manualControl').classList.toggle('hidden', mode !== 'manual');
-      byId('manualControlBody').classList.toggle('hidden', mode !== 'manual');
-      byId('manualControlPlaceholder').classList.toggle('hidden', mode === 'manual');
-      byId('fanPwmRange').disabled = mode !== 'manual';
-    }
-
-    function valueClass(kind, node, config) {
-      if (kind === 'temperature') return Number(node.temperature) <= Number(config.temperature_high) ? 'good' : 'bad';
-      if (kind === 'humidity') return Number(node.humidity) >= Number(config.humidity_low) ? 'good' : 'bad';
-      if (kind === 'light') return Number(node.light) >= Number(config.light_low) ? 'good' : 'bad';
-      return 'bad';
-    }
-
-    function renderNodes(nodes, config) {
-      const host = byId('nodeCards');
-      const keys = Object.keys(nodes || {});
-      if (!keys.length) {
-        host.innerHTML = '<div class="node-card"><div class="node-id">暂无节点数据</div><div class="foot">等待 BeaglePlay 发送 UDP JSON。</div></div>';
-        return;
-      }
-
-      host.innerHTML = keys.map((key) => {
-        const n = nodes[key];
-        const online = !!n.online;
-        const badgeClass = online ? 'ok' : 'bad';
-        const stateText = online ? 'ONLINE' : 'OFFLINE';
-        return `
-          <div class="node-card">
-            <div class="node-head">
-              <div class="node-id">${key}</div>
-              <span class="badge ${badgeClass}">${stateText}</span>
-            </div>
-            <div class="node-grid">
-              <div class="kv ${valueClass('temperature', n, config)}"><div class="k">温度</div><div class="v">${fmtNumber(n.temperature)} ℃</div></div>
-              <div class="kv ${valueClass('humidity', n, config)}"><div class="k">湿度</div><div class="v">${fmtNumber(n.humidity)} %</div></div>
-              <div class="kv ${valueClass('light', n, config)}"><div class="k">光照</div><div class="v">${fmtNumber(n.light)}</div></div>
-              <div class="kv"><div class="k">RSSI</div><div class="v">${Number(n.rssi).toFixed(0)} dBm</div></div>
-            </div>
-          </div>`;
-      }).join('');
-    }
-
-    function renderActuators(data) {
-      const host = byId('actuatorCards');
-      const summary = byId('autoSummary');
-      const actuators = data.actuators || {};
-      const config = data.config || {};
-      const nodes = data.nodes || {};
-      const controls = data.node_controls || {};
-      const isAuto = data.running && data.mode === 'auto';
-      const keys = Array.from(new Set([
-        ...Object.keys(nodes),
-        ...Object.keys(controls),
-      ])).sort();
-
-      summary.className = 'badge ' + (isAuto ? 'ok' : data.mode === 'safe' ? 'bad' : 'warn');
-      summary.textContent = `实际输出 灯${fmtBool(actuators.light)} / 水泵${fmtBool(actuators.pump)} / 风扇${fmtBool(actuators.fan)}`;
-
-      if (!keys.length) {
-        host.innerHTML = '<div class="actuator-card off"><div class="actuator-name">暂无节点判断</div><div class="actuator-rule">等待 F1/F2 数据。</div></div>';
-        return;
-      }
-
-      host.innerHTML = keys.map((key) => {
-        const node = nodes[key] || {};
-        const control = controls[key] || {};
-        const online = !!(node.online || control.online);
-        const lightOn = online && !!control.light_on;
-        const pumpOn = online && !!control.pump_on;
-        const fanOn = online && !!control.fan_on;
-        const active = lightOn || pumpOn || fanOn;
-        const stateText = online ? (active ? '需要处理' : '全部达标') : '离线';
-
-        return `
-        <div class="actuator-card ${!online ? 'off' : active ? 'need' : 'clear'}">
-          <div class="actuator-top">
-            <div class="actuator-name">${key}</div>
-            <div class="actuator-state ${active ? 'need' : 'off'}">${stateText}</div>
-          </div>
-          <div class="judge-list">
-            <div class="judge-row ${lightOn ? 'bad' : 'ok'}">
-              <div>
-                <div class="judge-name">光照</div>
-                <div class="judge-detail">当前 ${fmtNumber(node.light)} / 下限 ${fmtNumber(config.light_low)}</div>
-              </div>
-              <div class="judge-action">${lightOn ? '开灯' : '正常'}</div>
-            </div>
-            <div class="judge-row ${pumpOn ? 'bad' : 'ok'}">
-              <div>
-                <div class="judge-name">湿度</div>
-                <div class="judge-detail">当前 ${fmtNumber(node.humidity)}% / 下限 ${fmtNumber(config.humidity_low)}%</div>
-              </div>
-              <div class="judge-action">${pumpOn ? '喷水' : '正常'}</div>
-            </div>
-            <div class="judge-row ${fanOn ? 'bad' : 'ok'}">
-              <div>
-                <div class="judge-name">温度</div>
-                <div class="judge-detail">当前 ${fmtNumber(node.temperature)} ℃ / 上限 ${fmtNumber(config.temperature_high)} ℃</div>
-              </div>
-              <div class="judge-action">${fanOn ? '开风扇' : '正常'}</div>
-            </div>
-          </div>
-          <div class="actuator-rule">
-            实际输出：灯 ${fmtBool(actuators.light)} / 水泵 ${fmtBool(actuators.pump)} / 风扇 ${fmtBool(actuators.fan)}
-          </div>
-        </div>`;
-      }).join('');
-    }
-
-    function renderEvents(events) {
-      const host = byId('events');
-      if (!events || !events.length) {
-        host.innerHTML = '<div class="event">暂无事件</div>';
-        return;
-      }
-      host.innerHTML = events.slice().reverse().map((e) => {
-        const cls = e.level === 'warn' ? 'warn' : e.level === 'bad' || e.level === 'error' ? 'bad' : 'ok';
-        return `<div class="event ${cls}"><small>${e.level}</small>${e.text}</div>`;
-      }).join('');
-    }
-
-    function renderStatus(data) {
-      latestStatus = data;
-      const running = data.running === true;
-      const gatewayOnline = data.gateway === 'online';
-      setConnection(gatewayOnline, gatewayOnline ? '网关在线' : '网关离线');
-      byId('runningValue').textContent = fmtRunning(data.running);
-      byId('modeValue').textContent = data.mode || '-';
-      byId('gatewayValue').textContent = data.gateway || '-';
-      byId('onlineValue').textContent = String(Object.values(data.nodes || {}).filter((n) => n.online).length);
-      byId('updatedAt').textContent = fmtTime(data.last_update_ms);
-      byId('runningContent').classList.toggle('hidden', !running);
-
-      const config = data.config || {};
-      setInputIfIdle('light_low', config.light_low ?? '');
-      setInputIfIdle('humidity_low', config.humidity_low ?? '');
-      setInputIfIdle('temperature_high', config.temperature_high ?? '');
-      setInputIfIdle('pump_duration_sec', config.pump_duration_sec ?? '');
-      setInputIfIdle('pump_cooldown_sec', config.pump_cooldown_sec ?? '');
-
-      updateModeButtons(running ? (data.mode || 'safe') : 'safe');
-      syncFanPwmControls(data);
-      renderNodes(data.nodes || {}, config);
-      renderActuators(data);
-      renderEvents(data.events || []);
-    }
-
-    async function api(path, options = {}) {
-      const res = await fetch(path, {
-        headers: { 'Content-Type': 'application/json' },
-        ...options,
-      });
-      const text = await res.text();
-      let json = null;
-      try { json = JSON.parse(text); } catch (_) {}
-      if (!res.ok) {
-        const msg = json && json.error ? json.error : text || res.statusText;
-        throw new Error(msg);
-      }
-      return json || {};
-    }
-
-    async function postNoBody(path) {
-      try {
-        await api(path, { method: 'POST', body: '{}' });
-        await loadStatus();
-      } catch (err) {
-        setConnection(false, err.message);
-      }
-    }
-
-    async function setMode(mode) {
-      try {
-        await api('/api/mode', { method: 'POST', body: JSON.stringify({ mode }) });
-        await loadStatus();
-      } catch (err) {
-        setConnection(false, err.message);
-      }
-    }
-
-    async function saveConfig() {
-      try {
-        const payload = {
-          light_low: Number(byId('light_low').value),
-          humidity_low: Number(byId('humidity_low').value),
-          temperature_high: Number(byId('temperature_high').value),
-          pump_duration_sec: Number(byId('pump_duration_sec').value),
-          pump_cooldown_sec: Number(byId('pump_cooldown_sec').value),
+    createApp({
+      data() {
+        return {
+          status: null,
+          connectionOk: null,
+          connectionText: '等待状态',
+          editingConfig: false,
+          editingFanPwm: false,
+          fanPwm: 50,
+          configForm: {
+            light_low: 30,
+            humidity_low: 45,
+            temperature_high: 32,
+            pump_duration_sec: 3,
+            pump_cooldown_sec: 60,
+          },
         };
-        await api('/api/config', { method: 'POST', body: JSON.stringify(payload) });
-        await loadStatus();
-      } catch (err) {
-        setConnection(false, err.message);
-      }
-    }
+      },
+      computed: {
+        running() {
+          return this.status && this.status.running === true;
+        },
+        mode() {
+          return this.status && this.status.mode ? this.status.mode : 'safe';
+        },
+        config() {
+          return this.status && this.status.config ? this.status.config : this.configForm;
+        },
+        actuators() {
+          return this.status && this.status.actuators ? this.status.actuators : {};
+        },
+        runningValue() {
+          return this.status ? this.fmtRunning(this.status.running) : '未知';
+        },
+        modeValue() {
+          return this.status ? (this.status.mode || '-') : '-';
+        },
+        gatewayValue() {
+          return this.status ? (this.status.gateway || '-') : 'offline';
+        },
+        onlineValue() {
+          const nodes = this.status && this.status.nodes ? Object.values(this.status.nodes) : [];
+          return this.status ? String(nodes.filter((node) => node.online).length) : '-';
+        },
+        updatedAt() {
+          return this.status ? this.fmtTime(this.status.last_update_ms) : '-';
+        },
+        connectionClass() {
+          return this.connectionOk === true ? 'ok' : this.connectionOk === false ? 'bad' : '';
+        },
+        nodeCards() {
+          const nodes = this.status && this.status.nodes ? this.status.nodes : {};
+          return Object.keys(nodes).map((key) => ({ key, ...nodes[key] }));
+        },
+        controlCards() {
+          const nodes = this.status && this.status.nodes ? this.status.nodes : {};
+          const controls = this.status && this.status.node_controls ? this.status.node_controls : {};
+          return Array.from(new Set([...Object.keys(nodes), ...Object.keys(controls)])).sort().map((key) => {
+            const node = nodes[key] || {};
+            const control = controls[key] || {};
+            const online = !!(node.online || control.online);
+            const lightOn = online && !!control.light_on;
+            const pumpOn = online && !!control.pump_on;
+            const fanOn = online && !!control.fan_on;
+            const active = lightOn || pumpOn || fanOn;
+            return {
+              key,
+              node,
+              online,
+              lightOn,
+              pumpOn,
+              fanOn,
+              active,
+              stateText: online ? (active ? '需要处理' : '全部达标') : '离线',
+            };
+          });
+        },
+        autoSummaryClass() {
+          if (!this.status) return 'warn';
+          return this.running && this.mode === 'auto' ? 'ok' : this.mode === 'safe' ? 'bad' : 'warn';
+        },
+        autoSummaryText() {
+          return `实际输出 灯${this.fmtBool(this.actuators.light)} / 水泵${this.fmtBool(this.actuators.pump)} / 风扇${this.fmtBool(this.actuators.fan)}`;
+        },
+        events() {
+          const events = this.status && this.status.events ? this.status.events : [];
+          return events.slice().reverse();
+        },
+      },
+      mounted() {
+        this.loadStatus();
+        setInterval(this.loadStatus, 1000);
+      },
+      methods: {
+        fmtBool(value) {
+          return value ? 'ON' : 'OFF';
+        },
+        fmtRunning(value) {
+          return value === true ? '运行中' : '已停止';
+        },
+        fmtTime(ms) {
+          return ms ? new Date(ms).toLocaleString() : '-';
+        },
+        fmtNumber(value, digits = 1) {
+          if (value === null || value === undefined) return '-';
+          const number = Number(value);
+          return Number.isFinite(number) ? number.toFixed(digits) : '-';
+        },
+        valueClass(kind, node) {
+          if (kind === 'temperature') return Number(node.temperature) <= Number(this.config.temperature_high) ? 'good' : 'bad';
+          if (kind === 'humidity') return Number(node.humidity) >= Number(this.config.humidity_low) ? 'good' : 'bad';
+          if (kind === 'light') return Number(node.light) >= Number(this.config.light_low) ? 'good' : 'bad';
+          return 'bad';
+        },
+        eventClass(event) {
+          return event.level === 'warn' ? 'warn' : event.level === 'bad' || event.level === 'error' ? 'bad' : 'ok';
+        },
+        setConnection(ok, text) {
+          this.connectionOk = ok;
+          this.connectionText = text;
+        },
+        syncFromStatus(data) {
+          this.status = data;
+          const gatewayOnline = data.gateway === 'online';
+          this.setConnection(gatewayOnline, gatewayOnline ? '网关在线' : '网关离线');
 
-    async function controlDevice(device, action) {
-      try {
-        await api('/api/control', {
-          method: 'POST',
-          body: JSON.stringify({ device, action }),
-        });
-        await loadStatus();
-      } catch (err) {
-        setConnection(false, err.message);
-      }
-    }
+          if (!this.editingConfig && data.config) {
+            this.configForm = {
+              light_low: Number(data.config.light_low ?? 30),
+              humidity_low: Number(data.config.humidity_low ?? 45),
+              temperature_high: Number(data.config.temperature_high ?? 32),
+              pump_duration_sec: Number(data.config.pump_duration_sec ?? 3),
+              pump_cooldown_sec: Number(data.config.pump_cooldown_sec ?? 60),
+            };
+          }
 
-    async function setFanPwmFromSlider() {
-      try {
-        await api('/api/control', {
-          method: 'POST',
-          body: JSON.stringify({
-            device: 'fan',
-            action: 'pwm',
-            pwm: Number(byId('fanPwmRange').value),
-          }),
-        });
-        await loadStatus();
-      } catch (err) {
-        setConnection(false, err.message);
-        await loadStatus();
-      }
-    }
-
-    async function loadStatus() {
-      try {
-        const res = await fetch('/api/status');
-        const data = await res.json();
-        renderStatus(data);
-      } catch (err) {
-        setConnection(false, '后端离线');
-        byId('runningValue').textContent = '未知';
-        byId('modeValue').textContent = '-';
-        byId('gatewayValue').textContent = 'offline';
-        byId('onlineValue').textContent = '-';
-        byId('runningContent').classList.add('hidden');
-      }
-    }
-
-    loadStatus();
-    setInterval(loadStatus, 1000);
+          if (!this.editingFanPwm && data.actuators) {
+            this.fanPwm = Number(data.actuators.manual_fan_pwm_percent ?? 50);
+          }
+        },
+        async api(path, options = {}) {
+          const res = await fetch(path, {
+            headers: { 'Content-Type': 'application/json' },
+            ...options,
+          });
+          const text = await res.text();
+          let json = null;
+          try { json = JSON.parse(text); } catch (_) {}
+          if (!res.ok) {
+            const msg = json && json.error ? json.error : text || res.statusText;
+            throw new Error(msg);
+          }
+          return json || {};
+        },
+        async loadStatus() {
+          try {
+            const res = await fetch('/api/status');
+            const data = await res.json();
+            this.syncFromStatus(data);
+          } catch (_) {
+            this.status = null;
+            this.setConnection(false, '后端离线');
+          }
+        },
+        async postNoBody(path) {
+          try {
+            await this.api(path, { method: 'POST', body: '{}' });
+            await this.loadStatus();
+          } catch (err) {
+            this.setConnection(false, err.message);
+          }
+        },
+        async setMode(mode) {
+          try {
+            await this.api('/api/mode', { method: 'POST', body: JSON.stringify({ mode }) });
+            await this.loadStatus();
+          } catch (err) {
+            this.setConnection(false, err.message);
+          }
+        },
+        async saveConfig() {
+          try {
+            await this.api('/api/config', { method: 'POST', body: JSON.stringify(this.configForm) });
+            this.editingConfig = false;
+            await this.loadStatus();
+          } catch (err) {
+            this.setConnection(false, err.message);
+          }
+        },
+        async controlDevice(device, action) {
+          try {
+            await this.api('/api/control', {
+              method: 'POST',
+              body: JSON.stringify({ device, action }),
+            });
+            await this.loadStatus();
+          } catch (err) {
+            this.setConnection(false, err.message);
+          }
+        },
+        async setFanPwmFromSlider() {
+          try {
+            await this.api('/api/control', {
+              method: 'POST',
+              body: JSON.stringify({
+                device: 'fan',
+                action: 'pwm',
+                pwm: Number(this.fanPwm),
+              }),
+            });
+            this.editingFanPwm = false;
+            await this.loadStatus();
+          } catch (err) {
+            this.setConnection(false, err.message);
+            await this.loadStatus();
+          }
+        },
+      },
+    }).mount('#app');
   </script>
 </body>
 </html>
