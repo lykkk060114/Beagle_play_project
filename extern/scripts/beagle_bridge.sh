@@ -5,7 +5,7 @@ APP_DIR=/home/debian/extern/beagle_gateway
 BUILD_DIR="$APP_DIR/build"
 LOG_DIR=/home/debian/extern/logs
 APP="$BUILD_DIR/beagle_gateway"
-PWM_DIR=/sys/class/pwm/pwmchip2/pwm0
+PWM_DEVICE=23120000.pwm
 
 build() {
   cmake -S "$APP_DIR" -B "$BUILD_DIR"
@@ -40,9 +40,19 @@ write_pwm() {
 }
 
 fan_off() {
-  if [ -d "$PWM_DIR" ]; then
-    write_pwm "$PWM_DIR/duty_cycle" 0
-    write_pwm "$PWM_DIR/enable" 0
+  local pwm_dir=""
+  for chip in /sys/class/pwm/pwmchip*; do
+    [ -e "$chip" ] || continue
+    if readlink -f "$chip/device" | grep -q "$PWM_DEVICE"; then
+      pwm_dir="$chip/pwm0"
+      break
+    fi
+  done
+
+  [ -n "$pwm_dir" ] || return
+  if [ -d "$pwm_dir" ]; then
+    write_pwm "$pwm_dir/duty_cycle" 0
+    write_pwm "$pwm_dir/enable" 0
   fi
 }
 

@@ -59,6 +59,7 @@ private:
     unsigned long control_seq_{0};
     long long last_auto_pump_ms_{0};
     std::string index_html_{};
+    std::string vue_js_{};
     std::mutex state_mutex_{};
     // 整个后端维护的数据
     SystemState state_{};

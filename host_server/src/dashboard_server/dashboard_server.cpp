@@ -25,6 +25,7 @@ bool DashboardServer::start() {
         if (index_html_.empty()) {
             index_html_ = "<!doctype html><html><body><pre>static/index.html not found</pre></body></html>";
         }
+        vue_js_ = readFile(std::string(DASHBOARD_SOURCE_DIR) + "/web/vue.global.prod.js");
 
         if (!openUdpSocket()) {
             return false;
@@ -422,6 +423,10 @@ std::string DashboardServer::buildErrorJson(int code, const std::string& message
 HttpReply DashboardServer::handleRequest(const HttpRequest& request) {
         if (request.method == "GET" && request.path == "/") {
             return {200, "text/html; charset=utf-8", index_html_};
+        }
+
+        if (request.method == "GET" && request.path == "/vue.global.prod.js") {
+            return {200, "application/javascript; charset=utf-8", vue_js_};
         }
 
         if (request.method == "GET" && request.path == "/api/status") {

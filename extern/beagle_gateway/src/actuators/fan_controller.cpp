@@ -4,13 +4,49 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <dirent.h>
+#include <limits.h>
 #include <string>
 #include <sys/stat.h>
 #include <thread>
+#include <unistd.h>
 #include <utility>
 
+namespace {
+
+constexpr const char* kPwmClassDir = "/sys/class/pwm";
+constexpr const char* kFanPwmDevice = "23120000.pwm";
+
+std::string resolve_fan_pwm_chip(const std::string& fallback) {
+    DIR* dir = opendir(kPwmClassDir);
+    if (!dir) {
+        return fallback;
+    }
+
+    std::string result = fallback;
+    while (dirent* entry = readdir(dir)) {
+        const std::string name = entry->d_name;
+        if (name.rfind("pwmchip", 0) != 0) {
+            continue;
+        }
+
+        const std::string chip = std::string(kPwmClassDir) + "/" + name;
+        const std::string device_link = chip + "/device";
+        char resolved[PATH_MAX] {};
+        if (realpath(device_link.c_str(), resolved) && std::string(resolved).find(kFanPwmDevice) != std::string::npos) {
+            result = chip;
+            break;
+        }
+    }
+
+    closedir(dir);
+    return result;
+}
+
+}  // namespace
+
 FanController::FanController(std::string pwm_chip, int channel, int period_ns)
-    : pwm_chip_(std::move(pwm_chip)),
+    : pwm_chip_(resolve_fan_pwm_chip(pwm_chip)),
       pwm_path_(pwm_chip_ + "/pwm" + std::to_string(channel)),
       channel_(channel),
       period_ns_(period_ns),

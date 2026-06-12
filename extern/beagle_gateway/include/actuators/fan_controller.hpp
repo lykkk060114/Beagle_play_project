@@ -14,7 +14,7 @@
 
 class FanController {
 public:
-    FanController(std::string pwm_chip = "/sys/class/pwm/pwmchip2",
+    FanController(std::string pwm_chip = "/sys/class/pwm/pwmchip0",
                   int channel = 0,
                   int period_ns = 1000000);
 
