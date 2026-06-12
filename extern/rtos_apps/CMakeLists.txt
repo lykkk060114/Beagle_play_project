@@ -16,6 +16,7 @@ target_compile_definitions(app PRIVATE
 )
 
 target_sources(app PRIVATE
-    src/get_sensor/main.c
+    src/main/main.c
+    src/get_sensor/get_sensor.c
     src/oled/oled_show.c
 )

@@ -17,6 +17,7 @@
 #include <sensor_node/types.h>
 
 bool oled_show_init(void);
+void oled_set_light(bool enabled);
 void oled_show_sensor(const struct sensor_data *data, int rssi, int seq);
 
 #endif // OLED_SHOW_H

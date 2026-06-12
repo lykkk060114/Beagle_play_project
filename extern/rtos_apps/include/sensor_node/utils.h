@@ -12,18 +12,6 @@
 #ifndef SENSOR_NODE_UTILS_H
 #define SENSOR_NODE_UTILS_H
 
-#include <stddef.h>
-
-#include <zephyr/device.h>
-#include <zephyr/drivers/sensor.h>
-#include <zephyr/kernel.h>
-#include <zephyr/net/net_if.h>
-#include <zephyr/net/net_ip.h>
-#include <zephyr/net/socket.h>
-#include <zephyr/sys/printk.h>
-
-#include "types.h"
-
 #ifndef NODE_ID
 #define NODE_ID "F1"
 #endif
@@ -48,15 +36,8 @@
 #define BEAGLE_PORT 9999
 #endif
 
-static int setup_ipv6_addr(void);
-static int create_udp_socket(struct sockaddr_in6 *dest_addr);
-static int read_hdc2010(const struct device *dev, struct sensor_data *data);
-static int read_opt3001(const struct device *dev, struct sensor_data *data);
-static int build_payload(char *buf,
-                         size_t buf_size,
-                         const struct sensor_data *data,
-                         int rssi,
-                         int seq);
-static int abs_val2(int val2);
+#ifndef FREEDOM_CONTROL_PORT
+#define FREEDOM_CONTROL_PORT 10000
+#endif
 
 #endif // SENSOR_NODE_UTILS_H

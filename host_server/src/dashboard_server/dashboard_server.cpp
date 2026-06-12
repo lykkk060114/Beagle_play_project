@@ -279,6 +279,19 @@ void DashboardServer::rememberGatewayAddressLocked(const sockaddr_in& sender) {
     }
 
 std::string DashboardServer::buildControlJsonLocked() {
+        refreshNodeControlsLocked();
+        const auto node_light_on = [this](const std::string& node_name) {
+            if (!state_.running || state_.mode == "safe") {
+                return false;
+            }
+            if (state_.mode == "manual") {
+                return state_.actuators.light;
+            }
+
+            const auto it = state_.node_controls.find(node_name);
+            return it != state_.node_controls.end() && it->second.online && it->second.light_on;
+        };
+
         std::ostringstream oss;
         oss << "{";
         oss << "\"type\":\"control_state\",";
@@ -292,7 +305,9 @@ std::string DashboardServer::buildControlJsonLocked() {
         oss << "\"fan_on\":" << jsonBool(state_.actuators.fan) << ",";
         oss << "\"fan_pwm\":" << state_.actuators.fan_pwm_percent << ",";
         oss << "\"fan_auto\":" << jsonBool(state_.running && state_.mode == "auto") << ",";
-        oss << "\"temperature_high\":" << jsonNumber(state_.config.temperature_high);
+        oss << "\"temperature_high\":" << jsonNumber(state_.config.temperature_high) << ",";
+        oss << "\"light_F1\":" << jsonBool(node_light_on("F1")) << ",";
+        oss << "\"light_F2\":" << jsonBool(node_light_on("F2"));
         oss << "}";
         return oss.str();
     }

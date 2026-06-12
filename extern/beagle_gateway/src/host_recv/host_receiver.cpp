@@ -140,6 +140,23 @@ std::optional<HostCommand> HostReceiver::receive() {
         command.has_voice_enable = true;
     }
 
+    const auto light_it = fields.find("light");
+    if (light_it != fields.end() && parse_bool_token(light_it->second, command.light_on)) {
+        command.has_light_on = true;
+    }
+
+    for (const auto& [name, value] : fields) {
+        constexpr const char* prefix = "light_";
+        if (name.rfind(prefix, 0) != 0) {
+            continue;
+        }
+
+        bool light_on = false;
+        if (parse_bool_token(value, light_on)) {
+            command.node_lights[name.substr(std::strlen(prefix))] = light_on;
+        }
+    }
+
     return command;
 }
 

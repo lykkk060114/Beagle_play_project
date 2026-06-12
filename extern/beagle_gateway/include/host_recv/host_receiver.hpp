@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <optional>
 #include <string>
 
@@ -16,6 +17,9 @@ struct HostCommand {
     double temperature_high = 32.0;
     bool has_voice_enable = false;
     bool voice_enable = true;
+    bool has_light_on = false;
+    bool light_on = false;
+    std::map<std::string, bool> node_lights;
     std::string payload;
     std::string source;
 };

@@ -10,6 +10,65 @@
 #include <string>
 #include <unordered_map>
 
+#include <arpa/inet.h>
+#include <cstring>
+#include <net/if.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+namespace {
+
+constexpr int kFreedomControlPort = 10000;
+
+int open_freedom_control_socket() {
+    int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (sock < 0) {
+        perror("freedom control socket");
+        return -1;
+    }
+
+    const unsigned int ifindex = if_nametoindex("lowpan0");
+    if (ifindex != 0) {
+        setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_IF, &ifindex, sizeof(ifindex));
+    }
+
+    return sock;
+}
+
+void send_freedom_light_command(int sock, const std::string& node, bool light_on) {
+    if (sock < 0) {
+        return;
+    }
+
+    sockaddr_in6 addr {};
+    addr.sin6_family = AF_INET6;
+    addr.sin6_port = htons(kFreedomControlPort);
+    addr.sin6_scope_id = if_nametoindex("lowpan0");
+
+    if (inet_pton(AF_INET6, "ff02::1", &addr.sin6_addr) != 1) {
+        return;
+    }
+
+    const std::string payload = std::string("{\"node\":\"") + node +
+                                "\",\"light_on\":" +
+                                (light_on ? "true" : "false") + "}";
+
+    const ssize_t sent = sendto(sock,
+                                payload.c_str(),
+                                payload.size(),
+                                0,
+                                reinterpret_cast<const sockaddr*>(&addr),
+                                sizeof(addr));
+    if (sent < 0) {
+        perror("send freedom light");
+    } else {
+        std::cout << "TX Freedom " << node
+                  << " light_on=" << (light_on ? "true" : "false") << std::endl;
+    }
+}
+
+}  // namespace
+
 int main() {
     gateway::FreedomReceiver freedom_receiver(9999);
     gateway::HostSender host_sender("192.168.7.1", 9000);
@@ -17,6 +76,7 @@ int main() {
     gateway::ControlPolicy control_policy;
     FanController fan;
     VoicePlayer voice;
+    int freedom_control_sock = open_freedom_control_socket();
 
     std::unordered_map<std::string, gateway::NodeState> nodes;
 
@@ -66,6 +126,14 @@ int main() {
             const auto command = host_receiver.receive();
             if (!command.has_value()) {
                 break;
+            }
+            if (!command->node_lights.empty()) {
+                for (const auto& [node, light_on] : command->node_lights) {
+                    send_freedom_light_command(freedom_control_sock, node, light_on);
+                }
+            } else if (command->has_light_on) {
+                send_freedom_light_command(freedom_control_sock, "F1", command->light_on);
+                send_freedom_light_command(freedom_control_sock, "F2", command->light_on);
             }
             control_policy.apply_host_command(*command, fan, voice);
         }

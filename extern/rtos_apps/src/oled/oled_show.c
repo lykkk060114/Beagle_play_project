@@ -233,6 +233,21 @@ static bool oled_force_all_on(void)
     return true;
 }
 
+static bool oled_force_off(void)
+{
+    static const uint8_t off_cmd[] = {
+        0xa4, /* resume RAM content */
+        0xae, /* display off */
+    };
+
+    if (oled_cmds(off_cmd, sizeof(off_cmd)) < 0) {
+        printk("OLED off command failed\n");
+        return false;
+    }
+
+    return true;
+}
+
 static bool oled_write_init_cmds(void)
 {
     static const uint8_t init_cmds[] = {
@@ -299,24 +314,29 @@ bool oled_show_init(void)
 
     oled_ready = true;
 
-    if (!oled_force_all_on()) {
-        return false;
-    }
+    oled_force_off();
 
     printk("OLED ready\n");
 
     return true;
 }
 
+void oled_set_light(bool enabled)
+{
+    if (!oled_ready) {
+        return;
+    }
+
+    if (enabled) {
+        oled_force_all_on();
+    } else {
+        oled_force_off();
+    }
+}
+
 void oled_show_sensor(const struct sensor_data *data, int rssi, int seq)
 {
     ARG_UNUSED(data);
     ARG_UNUSED(rssi);
-
-    if (oled_ready) {
-        printk("OLED loop on: seq=%d\n", seq);
-        if (!oled_force_all_on()) {
-            printk("OLED loop on failed: seq=%d\n", seq);
-        }
-    }
+    ARG_UNUSED(seq);
 }
