@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-rsync -avh \
+rsync -rvh --no-times --omit-dir-times \
   -e 'ssh -F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/beagle_known_hosts' \
   --exclude 'build/' \
   --exclude 'CMakeFiles/' \

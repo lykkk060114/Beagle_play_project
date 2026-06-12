@@ -16,6 +16,7 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/i2c.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/util.h>
 
@@ -30,10 +31,20 @@
 #define OLED_HEIGHT 64
 #define OLED_PAGE_COUNT (OLED_HEIGHT / 8)
 #define OLED_BUF_SIZE (OLED_WIDTH * OLED_HEIGHT / 8)
+#define OLED_STACK_SIZE 2048
+#define OLED_PRIORITY 7
 
 static const struct i2c_dt_spec oled_i2c = I2C_DT_SPEC_GET(OLED_NODE);
 static uint8_t oled_buf[OLED_BUF_SIZE];
-static bool oled_ready;
+static K_THREAD_STACK_DEFINE(oled_stack, OLED_STACK_SIZE);
+static struct k_thread oled_thread;
+static K_MUTEX_DEFINE(oled_lock);
+static bool oled_thread_started;
+static bool oled_light_on;
+static bool oled_has_latest_data;
+static struct sensor_data oled_latest_data;
+static int oled_latest_rssi;
+static int oled_latest_seq;
 
 static int abs_val2(int val2)
 {
@@ -144,15 +155,6 @@ static void draw_pixel(int x, int y)
     oled_buf[(y / 8) * OLED_WIDTH + x] |= BIT(y % 8);
 }
 
-static void draw_fill_rect(int x, int y, int w, int h)
-{
-    for (int row = 0; row < h; row++) {
-        for (int col = 0; col < w; col++) {
-            draw_pixel(x + col, y + row);
-        }
-    }
-}
-
 static void draw_frame(void)
 {
     for (int x = 0; x < OLED_WIDTH; x++) {
@@ -217,6 +219,11 @@ static int oled_data(const uint8_t *data, size_t len)
     return i2c_write_dt(&oled_i2c, buf, len + 1);
 }
 
+static bool oled_show_ram(void);
+static bool oled_flush(void);
+static void oled_draw_sensor_page(const struct sensor_data *data, int rssi, int seq);
+static void oled_task(void *p1, void *p2, void *p3);
+
 static bool oled_force_all_on(void)
 {
     static const uint8_t all_on_cmd[] = {
@@ -229,19 +236,19 @@ static bool oled_force_all_on(void)
         return false;
     }
 
-    printk("OLED all-on command sent\n");
     return true;
 }
 
-static bool oled_force_off(void)
+static bool oled_show_ram(void)
 {
-    static const uint8_t off_cmd[] = {
+    static const uint8_t show_cmd[] = {
         0xa4, /* resume RAM content */
-        0xae, /* display off */
+        0xa6, /* normal display */
+        0xaf, /* display on */
     };
 
-    if (oled_cmds(off_cmd, sizeof(off_cmd)) < 0) {
-        printk("OLED off command failed\n");
+    if (oled_cmds(show_cmd, sizeof(show_cmd)) < 0) {
+        printk("OLED show RAM command failed\n");
         return false;
     }
 
@@ -280,7 +287,7 @@ static bool oled_write_init_cmds(void)
     return true;
 }
 
-static void oled_flush(void)
+static bool oled_flush(void)
 {
     for (int page = 0; page < OLED_PAGE_COUNT; page++) {
         uint8_t set_page[] = {
@@ -291,52 +298,126 @@ static void oled_flush(void)
 
         if (oled_cmds(set_page, sizeof(set_page)) < 0) {
             printk("OLED set page failed: %d\n", page);
-            return;
+            return false;
         }
 
         if (oled_data(&oled_buf[page * OLED_WIDTH], OLED_WIDTH) < 0) {
             printk("OLED write page failed: %d\n", page);
-            return;
+            return false;
         }
+    }
+
+    return true;
+}
+
+static void oled_draw_sensor_page(const struct sensor_data *data, int rssi, int seq)
+{
+    char line[24];
+
+    ARG_UNUSED(rssi);
+
+    memset(oled_buf, 0, sizeof(oled_buf));
+    draw_frame();
+
+    draw_text(4, 2, "NODE " NODE_ID);
+
+    draw_value(line, sizeof(line), "T", &data->temperature, "C");
+    draw_text(4, 16, line);
+
+    draw_value(line, sizeof(line), "H", &data->humidity, "%");
+    draw_text(4, 30, line);
+
+    draw_value(line, sizeof(line), "L", &data->light, "");
+    draw_text(4, 44, line);
+
+    snprintf(line, sizeof(line), "SEQ %d", seq);
+    draw_text(70, 2, line);
+
+    if (oled_flush()) {
+        oled_show_ram();
     }
 }
 
 bool oled_show_init(void)
 {
-    if (!i2c_is_ready_dt(&oled_i2c)) {
-        printk("OLED I2C bus is not ready\n");
-        return false;
+    if (oled_thread_started) {
+        return true;
     }
 
-    if (!oled_write_init_cmds()) {
-        return false;
-    }
-
-    oled_ready = true;
-
-    oled_force_off();
-
-    printk("OLED ready\n");
+    oled_thread_started = true;
+    k_thread_create(&oled_thread,
+                    oled_stack,
+                    K_THREAD_STACK_SIZEOF(oled_stack),
+                    (k_thread_entry_t)oled_task,
+                    NULL,
+                    NULL,
+                    NULL,
+                    OLED_PRIORITY,
+                    0,
+                    K_NO_WAIT);
+    printk("OLED task started\n");
 
     return true;
 }
 
 void oled_set_light(bool enabled)
 {
-    if (!oled_ready) {
-        return;
-    }
-
-    if (enabled) {
-        oled_force_all_on();
-    } else {
-        oled_force_off();
-    }
+    k_mutex_lock(&oled_lock, K_FOREVER);
+    oled_light_on = enabled;
+    k_mutex_unlock(&oled_lock);
 }
 
 void oled_show_sensor(const struct sensor_data *data, int rssi, int seq)
 {
-    ARG_UNUSED(data);
-    ARG_UNUSED(rssi);
-    ARG_UNUSED(seq);
+    k_mutex_lock(&oled_lock, K_FOREVER);
+    oled_latest_data = *data;
+    oled_latest_rssi = rssi;
+    oled_latest_seq = seq;
+    oled_has_latest_data = true;
+    k_mutex_unlock(&oled_lock);
+}
+
+static void oled_task(void *p1, void *p2, void *p3)
+{
+    ARG_UNUSED(p1);
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
+
+    if (!i2c_is_ready_dt(&oled_i2c)) {
+        printk("OLED I2C bus is not ready\n");
+        return;
+    }
+
+    if (!oled_write_init_cmds()) {
+        return;
+    }
+
+    oled_show_ram();
+    printk("OLED ready\n");
+
+    while (1) {
+        bool light_on;
+        bool has_data;
+        struct sensor_data data;
+        int rssi;
+        int seq;
+
+        k_mutex_lock(&oled_lock, K_FOREVER);
+        light_on = oled_light_on;
+        has_data = oled_has_latest_data;
+        data = oled_latest_data;
+        rssi = oled_latest_rssi;
+        seq = oled_latest_seq;
+        k_mutex_unlock(&oled_lock);
+
+        if (light_on) {
+            oled_force_all_on();
+        } else if (has_data) {
+            oled_draw_sensor_page(&data, rssi, seq);
+        } else {
+            oled_show_ram();
+        }
+
+        k_sleep(K_MSEC(1000));
+    }
 }

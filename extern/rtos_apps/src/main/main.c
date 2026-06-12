@@ -116,7 +116,6 @@ int main(void)
         }
 
         printk("JSON payload: %s\n", payload);
-        oled_show_sensor(&data, rssi, seq);
 
         ret = sendto(sock,
                      payload,
@@ -131,6 +130,8 @@ int main(void)
             printk("sendto success: bytes=%d seq=%d\n", ret, seq);
             seq++;
         }
+
+        oled_show_sensor(&data, rssi, seq);
 
         sleep_with_light_control(control_sock, &light_on);
     }
